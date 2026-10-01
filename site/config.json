@@ -1,0 +1,21 @@
+{
+  "name": "我的 NAS",
+  "subtitle": "Synology · 系统监控",
+  "api": {
+    "mode": "direct",
+    "url": ""
+  },
+  "refreshSeconds": 5,
+  "timeoutSeconds": 8,
+  "historyMinutes": 15,
+  "volumePattern": "^/volume[0-9]+$",
+  "networkInterfaces": [],
+  "networkIgnorePattern": "^(lo$|docker|veth|br-|virbr|tun|tap)",
+  "widgets": ["resources", "storage", "network", "containers"],
+  "thresholds": {
+    "cpu": 85,
+    "memory": 85,
+    "storage": 85,
+    "temperature": 70
+  }
+}

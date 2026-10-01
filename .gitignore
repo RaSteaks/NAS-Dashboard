@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.local
+config/glances.php
+test-results/
+playwright-report/
+artifacts/
+premium-audit.json
+.DS_Store

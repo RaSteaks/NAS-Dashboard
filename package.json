@@ -1,0 +1,23 @@
+{
+  "name": "nas-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^24.0.0",
+    "php-parser": "^3.2.3",
+    "prettier": "^3.5.3",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
