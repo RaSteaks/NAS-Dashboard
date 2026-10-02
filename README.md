@@ -180,107 +180,129 @@ rmdir "$package_dir"
 
 ### 方案 C：Container Manager 同步代码，Web Station 托管
 
-**只需一份 Compose YAML，无需先克隆仓库，也不构建镜像。** 容器使用 `alpine/git`
-将完整仓库保存到指定 NAS 目录，Web Station 使用其中的 `site/`。Docker 中没有
-nginx/PHP，不映射网站端口，不产生第二份仓库。
+镜像 `rasteaks/nas-dashboard:1.0.1` 内置同步和发布程序；Compose 只填写环境变量，
+不需要 `command`、`entrypoint` 或本地构建。同步成功后生成普通的 `site/` 目录，
+可在 File Station 和 Web Station 目录选择器中直接选择。
 
-#### 1. 准备两个独立目录
+#### 1. 创建或更新项目
+
+保留项目目录与数据目录，例如：
 
 ```text
-/volume1/docker/nas-dashboard-sync/   ← Container Manager 项目目录，保存 Compose
-/volume1/docker/nas-dashboard-repo/   ← 专用代码目录，首次使用时保持为空
+/volume3/Video/dockerconfig/nas-dashboard-sync/   ← Container Manager 项目目录
+/volume3/Video/dockerconfig/nas-dashboard-repo/   ← 代码与私有配置
 ```
 
-代码目录不能与 Compose 项目目录相同，否则目录中的 YAML 等文件会导致首次克隆失败。
-该路径使用绑定挂载，文件直接保存在 NAS 上。若父目录已被其他门户公开，请调整门户，
-确保仓库根目录不会被访问。
-
-#### 2. 创建 Container Manager 项目
-
-在 Container Manager → 项目中创建项目（如 `nas-dashboard-sync`），项目路径选择上面
-的同步目录，粘贴下方完整 YAML（与仓库根目录的 `docker-compose.yml` 一致），修改
-`volumes` 左侧路径为你的代码目录后创建并启动。NAS 需要能访问 Docker Hub 和 GitHub。
+停止旧同步容器，在项目中完整替换 YAML；移除旧的启动命令，应用配置并重新创建容器。
+不要仅修改标签后点击启动，也不要删除已有 `.sync` 或 `current`。首次部署需先确认
+Docker Hub 上已发布该版本；下面的构建步骤本身不等于镜像已上传。
 
 ```yaml
 services:
   nas-dashboard-sync:
-    image: alpine/git:latest
+    image: rasteaks/nas-dashboard:1.0.1
     container_name: nas-dashboard-sync
     restart: "no"
+    environment:
+      GITSYNC_REPO: https://github.com/RaSteaks/NAS-Dashboard.git
+      GITSYNC_REF: main
+      GITSYNC_ONE_TIME: "true"
+      GITSYNC_SYNC_TIMEOUT: 120s
     volumes:
-      # Only change the NAS path on the left; Web Station serves its site/ folder.
-      - /volume1/docker/nas-dashboard-repo:/repo
-    working_dir: /repo
-    # Exit on any error so a failed fetch never replaces the existing website.
-    entrypoint: ["/bin/sh", "-ec"]
-    command:
-      - |
-        umask 022
-        git config --global --replace-all safe.directory /repo
-        if [ -d .git ]; then
-          git fetch --depth 1 origin main
-          git reset --hard FETCH_HEAD
-        else
-          git clone --depth 1 --branch main https://github.com/RaSteaks/NAS-Dashboard.git .
-        fi
-        echo "sync: complete"
+      # Select this NAS directory's ordinary site/ folder in Web Station.
+      - /volume3/Video/dockerconfig/nas-dashboard-repo:/data
 ```
 
-配置固定同步本仓库的 `main` 分支，无需环境变量或额外脚本。示例使用 `latest`；需要
-固定版本时可换成镜像项目提供的版本标签或摘要。
+| 环境变量               | 用途                                      |
+| ---------------------- | ----------------------------------------- |
+| `GITSYNC_REPO`         | 要同步的仓库地址                          |
+| `GITSYNC_REF`          | 分支、标签或提交，示例为 `main`           |
+| `GITSYNC_ONE_TIME`     | 必须保持 `true`，每启动一次同步并发布一次 |
+| `GITSYNC_SYNC_TIMEOUT` | Git 同步超时，默认 120 秒                 |
 
-#### 3. 确认同步完成
+镜像内部已设置 `GITSYNC_ROOT=/data/.sync` 和 `GITSYNC_LINK=/data/current`，一般无需
+修改。如果需要代理，在 `environment` 中添加实际可用的 `HTTPS_PROXY`、`HTTP_PROXY`
+或 `NO_PROXY`；地址必须能从同步容器访问。
 
-查看 `nas-dashboard-sync` 容器日志应看到 `sync: complete`；容器随后显示“已停止”，
-**退出码 0 表示任务成功，这是正常状态**。它不是常驻网站服务，无需健康检查或自动
-重启；退出码非 0 时先看日志，不要将停止状态一律理解为成功。
+#### 2. 确认发布完成
 
-File Station 中代码目录应出现 `.git/`、`config/`、`site/` 等仓库文件（使用代理时在
-`config/` 中创建私有 `glances.php`）。
+成功时日志最终出现：
 
-#### 4. 配置 Web Station
+```text
+publish: complete; Web Station root is /data/site
+```
 
-- **直连 Glances**：按方案 A 创建静态网站，文档根目录设为
-  `/volume1/docker/nas-dashboard-repo/site`。
-- **PHP 同源代理**：按方案 B 创建 PHP 网站，根目录仍是上述 `site/`，在同级
-  `config/` 中创建私有配置并设置读取权限。
-- 给 `http` 组授予站点及父目录的读取/遍历权限；同步容器需有代码目录写权限。
-- 创建网页服务门户（如端口 `6080`）后访问 `http://NAS-IP:6080`。端口由 **Web
-  Station** 配置，Compose 不配置端口。只把 `site/` 设为公开根目录，不能公开整个
-  仓库或私有 `config/`。
+容器完成后停止，退出码 0 表示成功。看到 git-sync 的 `updated successfully` 仅代表
+下载完成，还应确认上述发布日志和最终退出码。数据目录内容为：
 
-#### 5. 后续更新
+```text
+nas-dashboard-repo/
+├── .sync/       ← 内部 Git 数据，由同步程序管理
+├── current     ← 内部符号链接，File Station 可能不显示，无需选择它
+├── site/        ← 普通目录，Web Station 实际使用
+└── config/      ← 使用 PHP 代理时，自行保留/创建 glances.php
+```
 
-在 Container Manager 中选中已停止的 `nas-dashboard-sync` 容器，点击**启动**；每启动
-一次执行一次同步，完成后再次退出（SSH 等效：`docker start -a nas-dashboard-sync`）。
-检查最近日志与退出码：
+#### 3. 在 Web Station 选择普通目录
+
+文档根目录选择：
+
+```text
+/volume3/Video/dockerconfig/nas-dashboard-repo/site
+```
+
+不再选择 `current/site`，也不要选择 `.sync` 下带提交哈希的目录。给 `http` 组授予
+`site/` 和父目录的读取/遍历权限；镜像设置标准可读权限，但群晖共享目录 ACL 仍需实机
+检查。网页门户和端口由 Web Station 提供，容器不运行 nginx/PHP，也不映射端口。
+
+- 直连 Glances：按方案 A 创建静态网站并填写 API 地址。
+- PHP 同源代理：按方案 B 创建 PHP 网站，私有配置放在同级
+  `nas-dashboard-repo/config/glances.php`。这样可使用默认配置路径；若此前已在 Web
+  Station PHP 环境设置 `GLANCES_CONFIG`，仍可继续使用该外部文件。不要把配置放入
+  `site/`、`.sync/` 或 `current/`。
+
+#### 4. 后续更新与迁移
+
+启动已停止的容器即可再次同步、发布：
 
 ```sh
+docker start -a nas-dashboard-sync
 docker logs --tail 100 nas-dashboard-sync
 docker inspect nas-dashboard-sync --format '{{.State.ExitCode}}'
 ```
 
-注意：
+- Git 同步失败不会发布，缺少 `site/index.html` 也会报错并保留已有网站。
+- 文件先复制到临时目录，再替换普通 `site/`，被上游删除的旧文件也会移除。替换的
+  两次重命名之间存在短暂空隙，并非完全原子；此时刷新失败可待发布完成后重试。
+- 发布会整体替换 `site/`，其中的本地定制需先备份；同级私有 `config/` 不受影响。
+- `.sync/` 专供 git-sync 管理，可能被清理，不能存放私有数据；旧版顶层 `.git/`
+  不会自动删除。`current` 仍是内部链接，目录选择器不显示它不会影响使用。
+- 1.0.0 只有链接入口。迁移时保留数据目录，更新至 1.0.1，确认发布成功后在 Web
+  Station 选择普通 `site/`。无需删除数据，也无需手动复制版本目录。
+- 配置、代理或镜像标签变更需重新创建容器。此方案不定时轮询，不随 NAS 开机自动更新。
 
-- 覆盖站点文件期间并非原子切换，短暂读到新旧混合资源时，等同步完成后再刷新。
-- 仅支持 `main` 分支；代码目录应为空或已是本仓库的检出。修改挂载路径后需应用新
-  Compose 并重新创建容器，只点启动不会更改配置。
-- Compose 脚本保存在 Container Manager 项目中，仓库更新不会自动替换；同步逻辑有
-  变更时需重新粘贴新版 YAML。
-- 失败时立即以非零退出码结束，不自动重试，已部署站点不受影响；网络恢复后手动启动
-  即可。不会随开机自动更新，也不定时轮询。
-- 同步会覆盖仓库中**已跟踪文件**的本地修改，未跟踪的私有 `config/glances.php`
-  会保留。默认面向公开仓库，私有仓库需单独配置认证。
+#### 构建和发布镜像
 
-<details>
-<summary>从旧 nginx 容器方案迁移</summary>
+`docker/Dockerfile` 基于 [git-sync v4.7.1](https://github.com/kubernetes/git-sync/tree/v4.7.1)，
+额外包含普通目录发布脚本。在仓库根目录构建并运行集成测试：
 
-先保留旧部署，在新的专用 NAS 目录完成同步并验证 Web Station 门户，再停止旧的
-`nas-dashboard` 容器。新服务名为 `nas-dashboard-sync`，与旧容器分开；旧命名卷不会
-自动迁移，其中自行修改的文件和私有配置应先备份再按需迁移。确认新站点可用后再清理
-旧容器及卷。浏览器设置按来源保存，更换域名、协议或端口后需重新填写 API 地址。
+```sh
+docker build -t nas-dashboard:1.0.1 docker
+npm run test:docker
+```
 
-</details>
+验证后使用已有多架构构建器发布新标签（不要覆盖旧的 1.0.0）：
+
+```sh
+docker login --username rasteaks
+docker buildx build --builder nas-dashboard-release-20261002 \
+  --platform linux/amd64,linux/arm64 \
+  -t rasteaks/nas-dashboard:1.0.1 -t rasteaks/nas-dashboard:latest \
+  --push docker
+```
+
+网站更新只需启动容器；同步或发布脚本改变才需要构建新镜像。发布镜像和修改 GitHub
+仓库是两个独立步骤。
 
 ## 🧯 常见问题与排查
 
@@ -387,20 +409,21 @@ curl -i 'http://NAS-IP:61208/api/4/cpu'
 
 ## ✅ 验证
 
-| 命令                   | 作用                                       |
-| ---------------------- | ------------------------------------------ |
-| `npm run typecheck`    | tsc 校验 JSDoc 类型（零产物）              |
-| `npm test`             | Vitest 单元测试与 Compose 同步脚本回归测试 |
-| `npm run format:check` | Prettier 格式检查                          |
-| `npm run test:e2e`     | Playwright 浏览器端到端测试                |
+| 命令                   | 作用                                  |
+| ---------------------- | ------------------------------------- |
+| `npm run typecheck`    | tsc 校验 JSDoc 类型（零产物）         |
+| `npm test`             | Vitest 单元测试                       |
+| `npm run test:docker`  | git-sync 真实容器同步与文档一致性验证 |
+| `npm run format:check` | Prettier 格式检查                     |
+| `npm run test:e2e`     | Playwright 浏览器端到端测试           |
 
 浏览器测试首次运行先执行 `npx playwright install chromium`（或用
 `PLAYWRIGHT_CHANNEL=chrome` 选择已安装的 Chrome）。测试使用隔离配置和模拟接口，覆盖
 桌面与手机、首次配置、断线、部分失败、模块管理、键盘、趋势绘制和自动无障碍检查。
 
-Compose 同步脚本测试直接执行 YAML 中的内联脚本，不需要 Docker daemon 或访问 GitHub，
-可单独运行 `npx vitest run tests/docker.test.js`，并用 `docker compose config --quiet`
-校验配置；不替代 NAS 上的镜像拉取、目录 ACL 和 Web Station 实际访问验证。
+使用 `docker compose config --quiet` 校验环境变量和挂载配置；`npm run test:docker`
+通过真实 Docker 镜像与临时本地仓库验证同步、版本链接切换和失败保留旧版本，需要
+Docker 与 Git，首次运行需拉取镜像。这不替代 NAS 目录 ACL 和 Web Station 门户实测。
 
 ## 📌 使用须知
 

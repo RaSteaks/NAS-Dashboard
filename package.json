@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:docker": "node --test tests/docker/sync.test.js"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

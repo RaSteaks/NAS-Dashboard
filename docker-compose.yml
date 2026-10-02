@@ -1,22 +1,13 @@
 services:
   nas-dashboard-sync:
-    image: alpine/git:latest
+    image: rasteaks/nas-dashboard:1.0.1
     container_name: nas-dashboard-sync
     restart: "no"
+    environment:
+      GITSYNC_REPO: https://github.com/RaSteaks/NAS-Dashboard.git
+      GITSYNC_REF: main
+      GITSYNC_ONE_TIME: "true"
+      GITSYNC_SYNC_TIMEOUT: 120s
     volumes:
-      # Only change the NAS path on the left; Web Station serves its site/ folder.
-      - /volume1/docker/nas-dashboard-repo:/repo
-    working_dir: /repo
-    # Exit on any error so a failed fetch never replaces the existing website.
-    entrypoint: ["/bin/sh", "-ec"]
-    command:
-      - |
-        umask 022
-        git config --global --replace-all safe.directory /repo
-        if [ -d .git ]; then
-          git fetch --depth 1 origin main
-          git reset --hard FETCH_HEAD
-        else
-          git clone --depth 1 --branch main https://github.com/RaSteaks/NAS-Dashboard.git .
-        fi
-        echo "sync: complete"
+      # Select this NAS directory's ordinary site/ folder in Web Station.
+      - /volume3/Video/dockerconfig/nas-dashboard-repo:/data

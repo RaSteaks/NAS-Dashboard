@@ -22,18 +22,18 @@ on first visit; no private NAS address or credentials ship as defaults.
 - Direct mode connects to a user-entered Glances API. Optional `site/api/index.php`
   provides a Web Station PHP/cURL proxy with a fixed upstream and read-only allowlist.
 - `config/glances.php` is private and excluded from Git and the public web root.
-- `docker-compose.yml` is a standalone Git synchronization job using `alpine/git`.
-  Paste it into Container Manager without cloning or building first. A bind mount
-  stores the single checkout at a chosen NAS path (default `/volume1/docker/nas-dashboard-repo`).
-  Web Station serves its `site/`; PHP/cURL remains in Web Station when needed.
-  The inline shell command is the canonical implementation, also exercised by tests.
-  Each manual start clones this repository on main or fetches origin/main and
-  resets to FETCH_HEAD. Shell errexit stops on failed fetches before replacing
-  site files. Successful jobs exit 0; failures exit nonzero without retries.
-  Keep the YAML minimal: no repository/branch variables, validation framework,
-  or VERSION generation. Old VERSION files are stale and must not be used.
-  No nginx, HTTP port, healthcheck, named volume, or automatic restart is used.
-  Never run git clean: private untracked `config/glances.php` must survive updates.
+- `docker-compose.yml` uses `rasteaks/nas-dashboard:1.0.1` with environment
+  variables only. The image packages git-sync plus `docker/publish.sh`.
+  Git-sync manages /data/.sync and the internal /data/current symlink. Only after
+  successful one-time sync does the wrapper stage and publish a normal /data/site
+  directory, because Synology's directory picker hides symlinks. A replacement
+  uses two renames with rollback on failure/interruption; the brief gap is not
+  atomic. Old site files are removed, but sibling config/ and .git/ are untouched.
+  Web Station selects <NAS data path>/site, and PHP uses sibling config/glances.php
+  by default. Do not place private config in managed site/, .sync/, or current/.
+  Build with `docker build -t nas-dashboard:1.0.1 docker`. The image only downloads
+  website code when run. Publishing requires user authorization. Never overwrite
+  released 1.0.0; it retains the old symlink-only behavior.
 - Demo data is explicitly enabled through settings or `?demo=1`; failures never
   substitute simulated values for live telemetry.
 
@@ -71,9 +71,10 @@ partial responses, settings, keyboard, empty data, and mobile layout. PHP syntax
 parsed by tests; verify the PHP/cURL runtime in Web Station before production use.
 Regression coverage includes stable icon nodes, class deduplication, sibling-path
 traversal, and symlinks outside the web root.
-Compose sync regression tests execute the inline shell with temporary local Git
-repositories, covering clone/update, repeated starts, failed fetches, nonempty
-initial directories, and private configuration retention.
+Run `npm run test:docker` for real-image integration tests using temporary Git
+repositories and bind mounts; these verify env configuration, clone/update, host
+ordinary-directory publishing, deleted-file cleanup, failure preservation, and
+existing private files outside .sync.
 Validate the standalone YAML with `docker compose config --quiet`.
 Do not claim a NAS deployment unless files and the target portal are verified.
 
