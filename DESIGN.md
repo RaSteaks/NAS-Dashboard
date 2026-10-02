@@ -10,9 +10,9 @@ colors:
   muted: "#65717c"
   border: "#e5e9ed"
   grid: "#eef1f4"
-  primary: "#16765e"
-  primary-hover: "#105e4b"
-  primary-soft: "#e5f1ec"
+  primary: "#216fa8"
+  primary-hover: "#195987"
+  primary-soft: "#e9f3fa"
   memory: "#8170c4"
   memory-soft: "#f0edf9"
   network: "#2a82c2"
@@ -75,7 +75,7 @@ The four different measurement colors are the visual signature, not decoration.
 - Register: product tool, opening directly into monitoring or first-run connection.
 - Evidence: current user brief and the referenced Web Station / Glances discussion.
 - Anti-references: marketing heroes, oversized metrics, a terminal clone, decorative
-  gradients, and falsely reassuring green status when the source is unavailable.
+  gradients, and falsely reassuring connected status when the source is unavailable.
 - Token ownership: `site/styles.css :root` is canonical. Frontmatter mirrors those
   accepted values. `colors.name` maps to `--color-name`; rounded control/panel maps
   to `--radius-control` / `--radius-panel`; spacing maps to `--space-page` / `--space-gap`.
@@ -84,8 +84,9 @@ The four different measurement colors are the visual signature, not decoration.
 
 ## Colors
 
-Cool neutral surfaces, graphite labels, restrained forest green actions, lavender
-memory traces, blue received traffic, and ochre sent traffic. Warning and failure
+Cool neutral surfaces, graphite labels, blue actions and CPU traces, lavender
+memory traces, lighter blue received traffic, and ochre sent traffic. Action blue
+is deeper than the brand mark to preserve text and button-label contrast. Warning and failure
 states carry text as well as color. This release uses one light theme, with a
 system-color path under forced colors. Scrollbar tokens apply globally.
 
@@ -158,6 +159,10 @@ browser-local preferences. API credentials are never accepted in browser fields.
 Persistent failures use one page notice rather than repeated toasts.
 
 ### Iconography
+
+The favicon and sidebar brand share a custom two-bay NAS SVG: white enclosure and solid
+blue drive bays (`colors.network`, #2a82c2). Broad gaps retain recognition at
+16px; the SVG is self-contained and has no fonts or external assets.
 
 Icon path data is extracted from Lucide v0.468 (ISC) into `site/js/ui/icons.js`
 and hydrated with a 1.7px stroke. The same icon identifies each widget in

@@ -68,6 +68,12 @@ Do not claim a NAS deployment unless files and the target portal are verified.
 
 ## Maintenance
 
+The favicon and sidebar share the blue (#2a82c2), two-bay NAS mark in `site/favicon.svg`.
+UI accents and CPU charts consume the primary blue (#216fa8) token, with darker
+hover (#195987) and pale selected backgrounds (#e9f3fa) for readable controls.
+Keep its filled geometry legible at 16px and bump the favicon URL version in
+`site/index.html` for both uses whenever the artwork changes to refresh browser caches.
+
 Keep code comments updated after edits, especially around rate units, concurrency,
 proxy boundaries, and lifecycle behavior. Keep DESIGN.md aligned with CSS tokens.
 Do not commit credentials, deploy automatically, or modify DSM nginx configuration.

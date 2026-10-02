@@ -13,9 +13,10 @@
   --color-muted: #65717c;
   --color-border: #e5e9ed;
   --color-grid: #eef1f4;
-  --color-primary: #16765e;
-  --color-primary-hover: #105e4b;
-  --color-primary-soft: #e5f1ec;
+  /* Deeper than the blue brand mark to keep text and white button labels readable. */
+  --color-primary: #216fa8;
+  --color-primary-hover: #195987;
+  --color-primary-soft: #e9f3fa;
   --color-memory: #8170c4;
   --color-memory-soft: #f0edf9;
   --color-network: #2a82c2;
@@ -190,15 +191,15 @@ h3 {
 .brand-icon {
   width: 34px;
   height: 34px;
-  color: white;
-  background: var(--color-primary);
-  border-radius: 8px;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
 }
-.brand-icon svg {
-  width: 21px;
-  height: 21px;
+/* Reuse the favicon artwork, including its rounded background, at both breakpoints. */
+.brand-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .brand-light {
   display: block;

@@ -6,15 +6,19 @@
     <meta name="theme-color" content="#f5f7f9" />
     <meta name="description" content="NAS 运行监控：资源、存储、网络与容器。" />
     <title>NAS Dashboard · 运行概览</title>
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="stylesheet" href="./styles.css" />
+    <!-- Bump the icon version when its artwork changes to refresh cached tabs. -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=3" />
+    <link rel="stylesheet" href="./styles.css?v=2" />
   </head>
   <body>
     <a class="skip-link" href="#main">跳至监控数据</a>
     <div id="app" class="app-shell">
       <aside class="sidebar" aria-label="主导航">
         <a class="brand" href="#overview" aria-label="NAS Dashboard 首页">
-          <span class="brand-icon"><i data-lucide="server"></i></span>
+          <!-- Share one brand asset with the browser tab; the link supplies its name. -->
+          <span class="brand-icon"
+            ><img src="./favicon.svg?v=3" alt="" width="34" height="34"
+          /></span>
           <span>NAS<span class="brand-light"> / dashboard</span></span>
         </a>
         <div class="nav-label">工作空间</div>
