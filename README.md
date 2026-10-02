@@ -98,7 +98,7 @@ npm run dev                  # 填写后（重新）启动开发服务
 
 1. 在套件中心安装 **Web Station**；方案 B 还需安装 PHP（8.1+），并在
    Web Station → 脚本语言设置 → PHP 中，为网站实际使用的配置文件启用 `curl`
-   扩展。
+   扩展；方案 C 需安装 **Container Manager**（Docker）。
 2. 规划 NAS 上的目录，例如 `/volume3/Video/web/nas-dashboard/`，并确认要使用的
    门户端口未被占用。避开浏览器限制访问的端口，如 `6000`；自定义门户可选择
    未占用的 `6080` 等端口。
@@ -108,14 +108,15 @@ npm run dev                  # 填写后（重新）启动开发服务
 
 ### 方案对比
 
-|                   | 方案 A · 静态站点            | 方案 B · PHP 同源代理                 |
-| ----------------- | ---------------------------- | ------------------------------------- |
-| 上手难度          | 最简单                       | 需要配置 PHP                          |
-| API 地址由谁提供  | 每位用户在浏览器里填写       | 服务端 `config/glances.php` 固定      |
-| Glances 需开 CORS | 是                           | 否                                    |
-| Glances 开启认证  | 不建议，建议改用方案 B       | 支持，凭据只存在服务端                |
-| HTTPS 限制        | HTTPS 页面必须连接 HTTPS API | 无此限制（同源转发）                  |
-| NAS 端要求        | 仅 Web Station               | Web Station + PHP 8.1+（启用 `curl`） |
+|                   | 方案 A · 静态站点            | 方案 B · PHP 同源代理                 | 方案 C · Docker 重启更新            |
+| ----------------- | ---------------------------- | ------------------------------------- | ----------------------------------- |
+| 上手难度          | 最简单                       | 需要配置 PHP                          | 需要群晖 Container Manager / Docker |
+| API 地址由谁提供  | 每位用户在浏览器里填写       | 服务端 `config/glances.php` 固定      | 每位用户在浏览器里填写（直接连接）  |
+| Glances 需开 CORS | 是                           | 否                                    | 是                                  |
+| Glances 开启认证  | 不建议，建议改用方案 B       | 支持，凭据只存在服务端                | 不建议，建议改用方案 B              |
+| HTTPS 限制        | HTTPS 页面必须连接 HTTPS API | 无此限制（同源转发）                  | HTTPS 页面必须连接 HTTPS API        |
+| NAS 端要求        | 仅 Web Station               | Web Station + PHP 8.1+（启用 `curl`） | Container Manager / Docker 20+      |
+| 版本更新          | 手动上传或 NAS 上 `git pull` | 手动上传或 NAS 上 `git pull`          | 重启容器即拉取最新 `main`           |
 
 ### 方案 A：静态站点
 
@@ -232,6 +233,37 @@ HTTPS 时，上游仍可使用内网 HTTP；浏览器无需直接连接 Glances 
 - 监控数据的访问控制由部署入口负责，生产门户可使用已有的 VPN 或认证入口。
 - 更新版本只需替换 `site/`；私有 `config/glances.php` 与浏览器里保存的设置不受
   影响。
+
+### 方案 C：Docker 部署（重启即更新）
+
+仓库自带 `docker-compose.yml` 与 `docker/` 构建文件：容器每次启动时先从公开
+仓库拉取最新 `main`，再用 nginx 托管 `site/`。配合 `restart: unless-stopped`，
+NAS 开机自启或手动重启容器就是"更新到最新版本"的操作。
+
+```sh
+git clone https://github.com/RaSteaks/NAS-Dashboard.git
+cd NAS-Dashboard
+docker compose up -d   # 构建并启动，浏览器访问 http://NAS-IP:8080
+```
+
+日常操作：
+
+| 操作               | 命令                              |
+| ------------------ | --------------------------------- |
+| 更新到仓库最新版本 | `docker restart nas-dashboard`    |
+| 查看部署的提交     | `curl http://NAS-IP:8080/VERSION` |
+| 查看拉取与启动日志 | `docker logs nas-dashboard`       |
+
+说明与边界：
+
+- 仓库检出保存在名为 `repo` 的卷中，重启时增量拉取，不重复克隆；拉取失败时
+  继续使用上一次的检出，仅首次克隆失败才退出（由重启策略自动重试）。
+- 连接方式请选择"直接连接"：容器内没有 PHP，方案 B 的同源代理不适用；需要
+  代理或 HTTPS 终结时，请继续使用 Web Station 部署或自行加反向代理。
+- 面板设置保存在浏览器 localStorage；从 Web Station 换到 Docker 端口后，需要
+  重新填写一次 Glances API 地址。
+- 仓库地址、分支与端口可用环境变量覆盖：`REPO_URL`、`BRANCH`、`PORT`；私有
+  仓库需自行挂载只读 deploy key 并改用 SSH 地址。
 
 ## 🧯 常见问题与排查
 

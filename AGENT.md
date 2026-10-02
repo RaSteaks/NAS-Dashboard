@@ -22,6 +22,11 @@ on first visit; no private NAS address or credentials ship as defaults.
 - Direct mode connects to a user-entered Glances API. Optional `site/api/index.php`
   provides a Web Station PHP/cURL proxy with a fixed upstream and read-only allowlist.
 - `config/glances.php` is private and excluded from Git and the public web root.
+- `docker/` plus the root `docker-compose.yml` are an optional deployment: the
+  entrypoint pulls the public repository on every container start and serves
+  `site/` with nginx. Restarting the container is the update gesture; the
+  checkout persists in a volume so pulls stay incremental, and a failed update
+  keeps serving the last known good checkout.
 - Demo data is explicitly enabled through settings or `?demo=1`; failures never
   substitute simulated values for live telemetry.
 

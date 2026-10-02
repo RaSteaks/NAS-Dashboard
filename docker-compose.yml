@@ -1,0 +1,25 @@
+# Serves site/ straight from the public repository. Restarting the container
+# (docker restart, NAS reboot via restart: unless-stopped) pulls the latest
+# commit before nginx starts. The dashboard itself should use "直接连接" mode;
+# this container has no PHP, so the same-origin proxy path stays on Web Station.
+services:
+  nas-dashboard:
+    build: ./docker
+    container_name: nas-dashboard
+    restart: unless-stopped
+    environment:
+      REPO_URL: ${REPO_URL:-https://github.com/RaSteaks/NAS-Dashboard.git}
+      BRANCH: ${BRANCH:-main}
+    volumes:
+      - repo:/var/www/repo # persistent checkout: restarts pull incrementally
+    ports:
+      - "${PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  repo:

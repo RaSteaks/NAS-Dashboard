@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Container entrypoints must stay LF so nginx:alpine can execute them.
+*.sh text eol=lf
