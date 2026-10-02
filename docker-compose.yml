@@ -10,4 +10,4 @@ services:
       GITSYNC_SYNC_TIMEOUT: 120s
     volumes:
       # Select this NAS directory's ordinary site/ folder in Web Station.
-      - /volume3/Video/dockerconfig/nas-dashboard-repo:/data
+      - /volume1/docker/nas-dashboard-repo:/data
