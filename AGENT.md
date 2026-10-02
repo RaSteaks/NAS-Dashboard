@@ -88,6 +88,9 @@ Keep its filled geometry legible at 16px and bump the favicon URL version in
 
 Keep code comments updated after edits, especially around rate units, concurrency,
 proxy boundaries, and lifecycle behavior. Keep DESIGN.md aligned with CSS tokens.
+Keep README deployment steps split into file acquisition and API connection mode.
+Troubleshooting must distinguish a missing container reference, a PHP entry-point 404,
+and upstream Glances errors; do not claim permissions are the sole cause of a 404.
 Do not commit credentials, deploy automatically, or modify DSM nginx configuration.
 Deployment ZIPs are generated from `site/`, the configuration example, README,
 and LICENSE only. Create a fresh archive so obsolete build entries cannot remain.
