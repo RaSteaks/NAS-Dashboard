@@ -2,18 +2,18 @@
 
 # NAS Dashboard
 
-**中文 NAS 监控面板** · 读取 Glances 4 REST API · 由群晖 Web Station 原生托管
+**中文 NAS 监控面板** · 读取 Glances 4 REST API · Web Station 托管 · Docker 可选同步代码
 
 部署后第一次访问填写 API 地址即可使用；地址与展示偏好仅保存在当前浏览器。
-不内置 NAS IP，也不需要为面板额外运行 nginx 容器。
+不内置 NAS IP。Web Station 负责网站服务；Docker 只负责把仓库同步到指定 NAS 目录。
 
 [![Node.js](https://img.shields.io/badge/Node.js-22.12%2B%20%7C%2024-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![Types](https://img.shields.io/badge/types-JSDoc_%2B_tsc-3178C6?logo=typescript&logoColor=white)](#-验证)
-[![Build](https://img.shields.io/badge/build-无·纯静态_ES_Modules-2ea44f)](#-部署到群晖-web-station)
+[![Build](https://img.shields.io/badge/build-无·纯静态_ES_Modules-2ea44f)](#-部署到-nas)
 [![Glances API](https://img.shields.io/badge/Glances_REST_API-4-16697A)](https://glances.readthedocs.io/en/latest/api/restful.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-946315)](./LICENSE)
 
-[功能一览](#-功能一览) · [数据链路](#-数据链路) · [快速开始](#-快速开始) · [部署上线](#-部署到群晖-web-station) · [常见问题](#-常见问题与排查) · [配置项](#-站点默认配置) · [使用须知](#-使用须知)
+[功能一览](#-功能一览) · [数据链路](#-数据链路) · [快速开始](#-快速开始) · [部署上线](#-部署到-nas) · [Docker 同步代码](#方案-ccontainer-manager-同步代码web-station-托管) · [常见问题](#-常见问题与排查) · [配置项](#-站点默认配置) · [使用须知](#-使用须知)
 
 </div>
 
@@ -39,7 +39,8 @@
 
 ## 🧭 数据链路
 
-页面本身是纯静态文件，由 Web Station 托管；数据获取有两条路径，按需选择：
+网站由群晖 Web Station 托管，数据获取有两条路径，按需选择。方案 C 只改变
+代码下载和更新方式，可搭配方案 A 直连或方案 B 的 PHP 同源代理：
 
 ```mermaid
 flowchart LR
@@ -59,7 +60,7 @@ flowchart LR
 
 ### 前置要求
 
-- 开发电脑安装 Node.js 22.12+ 或 24（NAS 上不需要 Node.js）。
+- 本地开发需要 Node.js 22.12+ 或 24；直接部署到 NAS 请跳到部署章节，无需安装 Node.js。
 - NAS 上运行着 Glances Web 模式（如 `glances -w`），API 地址形如
   `http://NAS-IP:61208/api/4`。
 
@@ -92,13 +93,13 @@ npm run dev                  # 填写后（重新）启动开发服务
 在设置中选择"同源代理"，地址使用 `./api/index.php`。该环境变量只由本地开发服务
 （`scripts/serve.mjs`）读取，页面不包含任何服务器地址。
 
-## 📦 部署到群晖 Web Station
+## 📦 部署到 NAS
 
 ### 部署前置
 
-1. 在套件中心安装 **Web Station**；方案 B 还需安装 PHP（8.1+），并在
-   Web Station → 脚本语言设置 → PHP 中，为网站实际使用的配置文件启用 `curl`
-   扩展；方案 C 需安装 **Container Manager**（Docker）。
+1. 在套件中心安装 **Web Station**。使用方案 B 时另需 PHP（8.1+），并在网站
+   实际使用的 PHP 配置文件中启用 `curl` 扩展。使用方案 C 自动下载代码时，
+   再安装 **Container Manager**；NAS 宿主机无需 Git、Node.js 或额外 nginx。
 2. 规划 NAS 上的目录，例如 `/volume3/Video/web/nas-dashboard/`，并确认要使用的
    门户端口未被占用。避开浏览器限制访问的端口，如 `6000`；自定义门户可选择
    未占用的 `6080` 等端口。
@@ -108,15 +109,16 @@ npm run dev                  # 填写后（重新）启动开发服务
 
 ### 方案对比
 
-|                   | 方案 A · 静态站点            | 方案 B · PHP 同源代理                 | 方案 C · Docker 重启更新            |
-| ----------------- | ---------------------------- | ------------------------------------- | ----------------------------------- |
-| 上手难度          | 最简单                       | 需要配置 PHP                          | 需要群晖 Container Manager / Docker |
-| API 地址由谁提供  | 每位用户在浏览器里填写       | 服务端 `config/glances.php` 固定      | 每位用户在浏览器里填写（直接连接）  |
-| Glances 需开 CORS | 是                           | 否                                    | 是                                  |
-| Glances 开启认证  | 不建议，建议改用方案 B       | 支持，凭据只存在服务端                | 不建议，建议改用方案 B              |
-| HTTPS 限制        | HTTPS 页面必须连接 HTTPS API | 无此限制（同源转发）                  | HTTPS 页面必须连接 HTTPS API        |
-| NAS 端要求        | 仅 Web Station               | Web Station + PHP 8.1+（启用 `curl`） | Container Manager / Docker 20+      |
-| 版本更新          | 手动上传或 NAS 上 `git pull` | 手动上传或 NAS 上 `git pull`          | 重启容器即拉取最新 `main`           |
+|                   | 方案 A · 手动部署直连        | 方案 B · PHP 同源代理  | 方案 C · Docker 同步代码               |
+| ----------------- | ---------------------------- | ---------------------- | -------------------------------------- |
+| 网站由谁提供      | Web Station                  | Web Station + PHP/cURL | Web Station，容器只下载文件            |
+| 代码如何获取      | 下载并上传，或自行 git clone | 与方案 A 相同          | 只粘贴 Compose，容器首次克隆、以后更新 |
+| 数据连接方式      | 浏览器直接访问 Glances       | PHP 连接固定上游       | 可选 A 或 B                            |
+| Glances 需开 CORS | 是                           | 否                     | 取决于选择 A 还是 B                    |
+| 上游认证          | 建议改用方案 B               | 凭据仅保存在服务端     | 需要认证时搭配 B                       |
+| HTTPS 页面        | 必须连接 HTTPS API           | 上游可使用内网 HTTP    | 取决于选择 A 还是 B                    |
+| NAS 额外要求      | 无                           | PHP 8.1+，启用 curl    | Container Manager                      |
+| 更新方式          | 上传新文件或自行 git pull    | 同 A，保留私有配置     | 手动启动同步容器，完成后自动退出       |
 
 ### 方案 A：静态站点
 
@@ -234,36 +236,174 @@ HTTPS 时，上游仍可使用内网 HTTP；浏览器无需直接连接 Glances 
 - 更新版本只需替换 `site/`；私有 `config/glances.php` 与浏览器里保存的设置不受
   影响。
 
-### 方案 C：Docker 部署（重启即更新）
+### 方案 C：Container Manager 同步代码，Web Station 托管
 
-仓库自带 `docker-compose.yml` 与 `docker/` 构建文件：容器每次启动时先从公开
-仓库拉取最新 `main`，再用 nginx 托管 `site/`。配合 `restart: unless-stopped`，
-NAS 开机自启或手动重启容器就是"更新到最新版本"的操作。
+**只需要一份 Compose YAML，不需要先克隆仓库，也不构建镜像。** 容器使用带 Git 的
+`alpine/git` 镜像，将完整仓库直接保存到指定 NAS 目录；Web Station 使用其中的
+`site/`。Docker 中没有 nginx/PHP，不映射网站端口，不产生第二份仓库。
 
-```sh
-git clone https://github.com/RaSteaks/NAS-Dashboard.git
-cd NAS-Dashboard
-docker compose up -d   # 构建并启动，浏览器访问 http://NAS-IP:8080
+#### 1. 准备两个独立目录
+
+在 File Station 中创建以下目录（存储卷和目录可替换）：
+
+```text
+/volume1/docker/nas-dashboard-sync/   ← Container Manager 项目目录，保存 Compose
+/volume1/docker/nas-dashboard-repo/   ← 专用代码目录，首次使用时保持为空
 ```
 
-日常操作：
+代码目录不能与 Compose 项目目录相同，否则目录中的 YAML 等文件会导致首次克隆
+失败。该路径使用绑定挂载，文件直接保存在 NAS 上，不是 Docker 命名卷。
+若父目录已被其他 Web Station 门户公开，请调整门户，确保仓库根目录不会被访问。
 
-| 操作               | 命令                              |
-| ------------------ | --------------------------------- |
-| 更新到仓库最新版本 | `docker restart nas-dashboard`    |
-| 查看部署的提交     | `curl http://NAS-IP:8080/VERSION` |
-| 查看拉取与启动日志 | `docker logs nas-dashboard`       |
+#### 2. 创建 Container Manager 项目
 
-说明与边界：
+1. 在 Container Manager → 项目中创建项目，名称可用 `nas-dashboard-sync`。
+2. 项目路径选择 `/volume1/docker/nas-dashboard-sync/`。
+3. 选择创建/输入 Compose 配置，粘贴下方**完整 YAML**。
+4. 修改 `volumes` 左侧路径为你的代码目录，保留右侧 `/repo`。
+5. 创建并启动项目。NAS 需要能访问 Docker Hub 和 GitHub。
 
-- 仓库检出保存在名为 `repo` 的卷中，重启时增量拉取，不重复克隆；拉取失败时
-  继续使用上一次的检出，仅首次克隆失败才退出（由重启策略自动重试）。
-- 连接方式请选择"直接连接"：容器内没有 PHP，方案 B 的同源代理不适用；需要
-  代理或 HTTPS 终结时，请继续使用 Web Station 部署或自行加反向代理。
-- 面板设置保存在浏览器 localStorage；从 Web Station 换到 Docker 端口后，需要
-  重新填写一次 Glances API 地址。
-- 仓库地址、分支与端口可用环境变量覆盖：`REPO_URL`、`BRANCH`、`PORT`；私有
-  仓库需自行挂载只读 deploy key 并改用 SSH 地址。
+下方与仓库根目录的 `docker-compose.yml` 保持一致；只复制这一份即可部署：
+
+```yaml
+# Paste this entire file into Container Manager; no host clone or build is needed.
+# Web Station serves the bind-mounted site/ directory. This container only syncs Git.
+services:
+  nas-dashboard-sync:
+    image: alpine/git:latest
+    container_name: nas-dashboard-sync
+    restart: "no"
+    environment:
+      REPO_URL: ${REPO_URL:-https://github.com/RaSteaks/NAS-Dashboard.git}
+      BRANCH: ${BRANCH:-main}
+      PULL_RETRIES: ${PULL_RETRIES:-5}
+      GIT_TERMINAL_PROMPT: "0"
+    volumes:
+      # Change the host path to your dedicated, initially empty NAS folder.
+      - ${SYNC_DIR:-/volume1/docker/nas-dashboard-repo}:/repo
+    entrypoint: ["/bin/sh", "-c"]
+    # Double dollars defer shell variables to the container, not Compose.
+    command:
+      - |
+        set -eu
+        umask 022
+        REPO_DIR="$${REPO_DIR:-/repo}"
+        RETRIES="$${PULL_RETRIES:-5}"
+        case "$$RETRIES" in
+          ''|0|*[!0-9]*) echo "sync: PULL_RETRIES must be a positive integer" >&2; exit 1 ;;
+        esac
+        git config --global --replace-all safe.directory "$$REPO_DIR"
+
+        sync_repo() {
+          if [ ! -d "$$REPO_DIR/.git" ]; then
+            git clone --depth 1 -b "$$BRANCH" "$$REPO_URL" "$$REPO_DIR" || return 1
+          else
+            # Explicit returns matter: the until loop disables implicit errexit here.
+            git -C "$$REPO_DIR" remote set-url origin "$$REPO_URL" || return 1
+            git -C "$$REPO_DIR" fetch --depth 1 origin "$$BRANCH" || return 1
+            # Check the incoming layout before replacing a working website.
+            git -C "$$REPO_DIR" cat-file -e FETCH_HEAD:site/index.html || return 1
+            git -C "$$REPO_DIR" reset --hard FETCH_HEAD || return 1
+          fi
+          test -f "$$REPO_DIR/site/index.html"
+        }
+
+        attempt=1
+        until sync_repo; do
+          if [ "$$attempt" -ge "$$RETRIES" ]; then
+            echo "sync: failed after $$RETRIES attempts; see Git errors above" >&2
+            exit 1
+          fi
+          echo "sync: attempt $$attempt/$$RETRIES failed; retrying in 3s" >&2
+          attempt=$$((attempt + 1))
+          sleep 3
+        done
+
+        # Only advertise a new version after a successful sync; keep private files.
+        git -C "$$REPO_DIR" rev-parse --short HEAD > "$$REPO_DIR/site/VERSION"
+        echo "sync: complete; Web Station root is $$REPO_DIR/site (inside container)"
+        cat "$$REPO_DIR/site/VERSION"
+```
+
+`$$` 是 Compose 的转义语法，粘贴时不要改成 `$`。镜像自带 Git，无需运行
+`apk add`。镜像与挂载说明见 [alpine/git 项目](https://github.com/alpine-docker/git)、
+[Docker 绑定挂载文档](https://docs.docker.com/engine/storage/bind-mounts/) 和
+[Compose 变量转义说明](https://docs.docker.com/reference/compose-file/interpolation/)。
+示例使用 `latest`；需要固定镜像版本时，可换成镜像项目提供的版本标签或摘要。
+
+#### 3. 确认同步完成
+
+查看 `nas-dashboard-sync` 容器日志，应看到 `sync: complete` 和提交 ID。
+容器随后显示“已停止”，**退出码 0 表示任务成功，这是正常状态**。它不是常驻
+网站服务，不需要配置健康检查或自动重启。退出码非 0 时先检查日志，不要将停止
+状态一律理解为成功。
+
+File Station 中应出现：
+
+```text
+/volume1/docker/nas-dashboard-repo/
+├── .git/
+├── config/                  ← 使用代理时，在此创建私有 glances.php
+├── site/                    ← Web Station 文档根目录
+│   ├── index.html
+│   ├── VERSION              ← 最近一次成功同步的短提交 ID
+│   └── ...
+└── 其他仓库文件
+```
+
+#### 4. 配置 Web Station
+
+- **直连 Glances**：按方案 A 创建静态网站，文档根目录设为
+  `/volume1/docker/nas-dashboard-repo/site`。
+- **PHP 同源代理**：按方案 B 创建 PHP 网站，根目录仍是上述 `site/`，启用 curl，
+  在同级 `config/` 中创建私有配置并设置 PHP 读取权限。
+- 给 Web Station 的 `http` 组授予站点及父目录所需的读取/遍历权限；同步容器需有
+  代码目录写权限。脚本使用 `umask 022`，但不会修改 NAS 已有的共享目录 ACL。
+- 在 Web Station 创建对应网页服务门户，例如选择未占用的 `6080` 端口，然后访问
+  `http://NAS-IP:6080`。这里的端口由 **Web Station** 配置，Compose 不配置 `PORT`。
+
+只把 `site/` 设为公开根目录，不能公开整个仓库或私有 `config/`。
+打开页面后按所选方式测试连接并保存。面板只展示监控数据，Glances 仍需另外运行。
+
+#### 5. 后续更新
+
+在 Container Manager 中选中已停止的 `nas-dashboard-sync` 容器，点击**启动**。
+每启动一次执行一次同步，完成后再次退出；Web Station 始终负责提供网站。
+可选的 SSH 等效命令：
+
+```sh
+docker start -a nas-dashboard-sync
+```
+
+检查最近日志与退出码：
+
+```sh
+docker logs --tail 100 nas-dashboard-sync
+docker inspect nas-dashboard-sync --format '{{.State.ExitCode}}'
+```
+
+打开网站的 `/VERSION`，或查看 NAS 上 `site/VERSION`，可确认最近一次成功同步的
+提交。更新完成后刷新页面；覆盖站点文件期间并非原子切换，短暂读取到新旧混合
+资源时，等待同步完成后再刷新。
+
+- 默认同步 `main`。修改 `REPO_URL`、`BRANCH`、重试次数或挂载路径后，需要在
+  Container Manager 中应用新 Compose 并重新创建容器；只点击启动不会更改配置。
+- Compose 脚本已保存在 Container Manager 项目中，仓库更新不会自动替换这份脚本。
+  后续同步逻辑有变更时，需要重新粘贴新版 YAML 并应用；无需构建镜像。
+- 默认失败重试最多 5 次、间隔 3 秒，耗尽后退出码为 1。拉取失败不会重置旧检出或
+  更新 `VERSION`，已部署站点仍由 Web Station 提供；网络恢复后重新启动同步容器。
+- 此方案不会随 NAS 开机自动更新，也不进行定时轮询；网站服务由 Web Station 管理。
+- 同步会覆盖仓库中**已跟踪文件**的本地修改。站点定制应提交到所选仓库；脚本不执行
+  `git clean`，未跟踪的私有 `config/glances.php` 会保留。默认面向公开仓库，私有
+  仓库需要单独配置认证，不要将凭据写进 README 或提交到 Git。
+
+#### 从旧 nginx 容器方案迁移
+
+先保留旧部署，在新的专用 NAS 目录完成同步并验证 Web Station 门户，再停止旧的
+`nas-dashboard` 容器。新服务名为 `nas-dashboard-sync`，与旧容器分开。
+旧命名卷不会自动迁移；其中自行修改的文件和私有配置应先备份再按需迁移。
+确认新站点可用后，再自行清理旧容器及卷。浏览器设置按来源保存，更换域名、协议
+或端口后，需要重新填写 API 地址。
 
 ## 🧯 常见问题与排查
 
@@ -300,7 +440,7 @@ docker compose up -d   # 构建并启动，浏览器访问 http://NAS-IP:8080
 存在，因此 `curl` 能连接端口并不代表浏览器能访问，改端口后仍需确认首页正常。
 端口限制依据见 [Fetch 标准](https://fetch.spec.whatwg.org/#port-blocking)。
 
-### 连接失败（方案 A 直连）
+### 连接失败（方案 A，或方案 C 搭配直连）
 
 | 现象                                         | 可能原因                                                  | 处理方式                                                       |
 | -------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------- |
@@ -428,12 +568,12 @@ curl --noproxy '*' --connect-timeout 3 --max-time 8 -i 'http://NAS-IP:61208/api/
 
 ## ✅ 验证
 
-| 命令                   | 作用                          |
-| ---------------------- | ----------------------------- |
-| `npm run typecheck`    | tsc 校验 JSDoc 类型（零产物） |
-| `npm test`             | Vitest 单元测试               |
-| `npm run format:check` | Prettier 格式检查             |
-| `npm run test:e2e`     | Playwright 浏览器端到端测试   |
+| 命令                   | 作用                                       |
+| ---------------------- | ------------------------------------------ |
+| `npm run typecheck`    | tsc 校验 JSDoc 类型（零产物）              |
+| `npm test`             | Vitest 单元测试与 Compose 同步脚本回归测试 |
+| `npm run format:check` | Prettier 格式检查                          |
+| `npm run test:e2e`     | Playwright 浏览器端到端测试                |
 
 浏览器测试默认使用 Playwright 专用 Chromium，首次运行先执行
 `npx playwright install chromium`；也可通过 `PLAYWRIGHT_CHANNEL=chrome` 选择已安装的
@@ -442,6 +582,12 @@ Chrome。原生下拉菜单使用浏览器选择 API 验证，键盘测试覆盖
 测试使用隔离配置和模拟接口，覆盖桌面与手机、首次配置、断线、部分失败、模块管理、
 键盘、趋势绘制和自动无障碍检查。PHP 解析测试只验证语法，不替代 Web Station 的
 PHP / cURL 运行时验证。
+
+Compose 同步脚本测试需要本机安装 Git 和 POSIX `sh`，直接执行 YAML 中的内联脚本，
+使用临时本地仓库验证首次克隆、重复启动、仓库和分支切换、失败重试、退出状态及
+私有配置保留；不需要 Docker daemon 或访问 GitHub。可单独执行
+`npx vitest run tests/docker.test.js`，并用 `docker compose config --quiet` 校验配置。
+这些检查不替代 NAS 上的镜像拉取、目录 ACL 和 Web Station 实际访问验证。
 
 ## 📌 使用须知
 

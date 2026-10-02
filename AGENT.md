@@ -22,11 +22,16 @@ on first visit; no private NAS address or credentials ship as defaults.
 - Direct mode connects to a user-entered Glances API. Optional `site/api/index.php`
   provides a Web Station PHP/cURL proxy with a fixed upstream and read-only allowlist.
 - `config/glances.php` is private and excluded from Git and the public web root.
-- `docker/` plus the root `docker-compose.yml` are an optional deployment: the
-  entrypoint pulls the public repository on every container start and serves
-  `site/` with nginx. Restarting the container is the update gesture; the
-  checkout persists in a volume so pulls stay incremental, and a failed update
-  keeps serving the last known good checkout.
+- `docker-compose.yml` is a standalone Git synchronization job using `alpine/git`.
+  Paste it into Container Manager without cloning or building first. A bind mount
+  stores the single checkout at a chosen NAS path (default `/volume1/docker/nas-dashboard-repo`).
+  Web Station serves its `site/`; PHP/cURL remains in Web Station when needed.
+  The inline shell command is the canonical implementation, also exercised by tests.
+  Each manual container start fetches the configured repository/branch, validates
+  the incoming site, and resets to FETCH_HEAD. Successful jobs exit 0; exhausted
+  retries exit 1 and failed fetches leave the previous website and VERSION intact.
+  No nginx, HTTP port, healthcheck, named volume, or automatic restart is used.
+  Never run git clean: private untracked `config/glances.php` must survive updates.
 - Demo data is explicitly enabled through settings or `?demo=1`; failures never
   substitute simulated values for live telemetry.
 
@@ -64,6 +69,10 @@ partial responses, settings, keyboard, empty data, and mobile layout. PHP syntax
 parsed by tests; verify the PHP/cURL runtime in Web Station before production use.
 Regression coverage includes stable icon nodes, class deduplication, sibling-path
 traversal, and symlinks outside the web root.
+Compose sync regression tests execute the inline shell with temporary local Git
+repositories, covering repeat starts, repository/branch changes, retry recovery,
+failure exit status, previous-site preservation, and private configuration retention.
+Validate the standalone YAML with `docker compose config --quiet`.
 Do not claim a NAS deployment unless files and the target portal are verified.
 
 ## Maintenance
