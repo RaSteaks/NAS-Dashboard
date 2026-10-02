@@ -7,6 +7,9 @@
 部署后第一次访问填写 API 地址即可使用；地址与展示偏好仅保存在当前浏览器。
 Web Station 负责网站服务；Docker 只负责把仓库同步到指定 NAS 目录。
 
+Docker 镜像：[rasteaks/nas-dashboard](https://hub.docker.com/r/rasteaks/nas-dashboard)，
+已发布 `1.0.1`（同时提供 `latest`），支持 `linux/amd64` 和 `linux/arm64`。
+
 [![Node.js](https://img.shields.io/badge/Node.js-22.12%2B%20%7C%2024-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![Types](https://img.shields.io/badge/types-JSDoc_%2B_tsc-3178C6?logo=typescript&logoColor=white)](#-验证)
 [![Build](https://img.shields.io/badge/build-无·纯静态_ES_Modules-2ea44f)](#-部署到-nas)
@@ -180,7 +183,8 @@ rmdir "$package_dir"
 
 ### 方案 C：Container Manager 同步代码，Web Station 托管
 
-镜像 `rasteaks/nas-dashboard:1.0.1` 内置同步和发布程序；Compose 只填写环境变量，
+使用已发布的 `rasteaks/nas-dashboard:1.0.1` 镜像，无需在 NAS 上克隆仓库或构建镜像。
+镜像内置同步和发布程序；Compose 只填写环境变量，
 不需要 `command`、`entrypoint` 或本地构建。同步成功后生成普通的 `site/` 目录，
 可在 File Station 和 Web Station 目录选择器中直接选择。
 
@@ -193,9 +197,13 @@ rmdir "$package_dir"
 /volume3/Video/dockerconfig/nas-dashboard-repo/   ← 代码与私有配置
 ```
 
-停止旧同步容器，在项目中完整替换 YAML；移除旧的启动命令，应用配置并重新创建容器。
-不要仅修改标签后点击启动，也不要删除已有 `.sync` 或 `current`。首次部署需先确认
-Docker Hub 上已发布该版本；下面的构建步骤本身不等于镜像已上传。
+1. 在 File Station 创建或保留上述两个目录；已有数据无需删除。
+2. 在 Container Manager 新建项目，项目路径选择 `nas-dashboard-sync` 目录；已有项目
+   先停止旧同步容器，再编辑原项目的 YAML。
+3. 粘贴下方完整配置，将挂载左侧路径改为实际 NAS 路径，右侧保持 `/data`。
+   **完整替换旧配置，移除旧的 `command`、`entrypoint` 和 `/repo` 挂载。**
+4. 拉取 `rasteaks/nas-dashboard:1.0.1`，应用配置并重新创建、启动容器。
+   仅点击旧容器的“启动/重启”不会更换镜像。无需映射端口或配置容器网页服务。
 
 ```yaml
 services:
@@ -243,9 +251,13 @@ nas-dashboard-repo/
 └── config/      ← 使用 PHP 代理时，自行保留/创建 glances.php
 ```
 
+在 File Station 打开普通的 `site/`，应能看到 `index.html`、`styles.css`、`js/` 等。
+如果仍然只看到 `.sync/`，先确认容器确实使用 **1.0.1**，而不是旧的 1.0.0；查看日志
+是否出现 `publish: complete`。不用寻找被界面隐藏的 `current` 链接。
+
 #### 3. 在 Web Station 选择普通目录
 
-文档根目录选择：
+在 Web Station 的目录选择器中展开数据目录，选择普通的 `site` 文件夹：
 
 ```text
 /volume3/Video/dockerconfig/nas-dashboard-repo/site
@@ -277,11 +289,17 @@ docker inspect nas-dashboard-sync --format '{{.State.ExitCode}}'
 - 发布会整体替换 `site/`，其中的本地定制需先备份；同级私有 `config/` 不受影响。
 - `.sync/` 专供 git-sync 管理，可能被清理，不能存放私有数据；旧版顶层 `.git/`
   不会自动删除。`current` 仍是内部链接，目录选择器不显示它不会影响使用。
-- 1.0.0 只有链接入口。迁移时保留数据目录，更新至 1.0.1，确认发布成功后在 Web
-  Station 选择普通 `site/`。无需删除数据，也无需手动复制版本目录。
+- 1.0.0 只有链接入口，File Station 和 Web Station 目录选择器可能隐藏它。
+  迁移时保留数据目录，拉取 1.0.1 并重新创建容器，确认发布成功后在 Web Station
+  选择普通 `site/`。无需删除 `.sync`，也无需手动复制带提交哈希的目录。
 - 配置、代理或镜像标签变更需重新创建容器。此方案不定时轮询，不随 NAS 开机自动更新。
 
-#### 构建和发布镜像
+**网站更新与镜像升级是两件事**：网站代码更新只需启动同步容器；镜像升级需要拉取
+新镜像并重新创建容器。部署建议固定 `1.0.1` 标签；若使用 `latest`，也需要重新拉取
+并创建容器才能使用新镜像。
+
+<details>
+<summary>维护者：构建和发布新版本镜像（普通部署无需执行）</summary>
 
 `docker/Dockerfile` 基于 [git-sync v4.7.1](https://github.com/kubernetes/git-sync/tree/v4.7.1)，
 额外包含普通目录发布脚本。在仓库根目录构建并运行集成测试：
@@ -291,18 +309,28 @@ docker build -t nas-dashboard:1.0.1 docker
 npm run test:docker
 ```
 
-验证后使用已有多架构构建器发布新标签（不要覆盖旧的 1.0.0）：
+验证后选择一个尚未发布的新版本标签，不要覆盖已发布的 `1.0.0` 或 `1.0.1`。
+首次在开发电脑上创建构建器：
+
+```sh
+docker buildx create --name nas-dashboard-builder --driver docker-container
+```
+
+登录后发布双架构镜像；以下 `1.0.2` 仅是下一版本标签示例，不表示已发布：
 
 ```sh
 docker login --username rasteaks
-docker buildx build --builder nas-dashboard-release-20261002 \
+IMAGE_TAG=1.0.2
+docker buildx build --builder nas-dashboard-builder \
   --platform linux/amd64,linux/arm64 \
-  -t rasteaks/nas-dashboard:1.0.1 -t rasteaks/nas-dashboard:latest \
+  -t "rasteaks/nas-dashboard:$IMAGE_TAG" -t rasteaks/nas-dashboard:latest \
   --push docker
 ```
 
 网站更新只需启动容器；同步或发布脚本改变才需要构建新镜像。发布镜像和修改 GitHub
 仓库是两个独立步骤。
+
+</details>
 
 ## 🧯 常见问题与排查
 
@@ -422,7 +450,7 @@ curl -i 'http://NAS-IP:61208/api/4/cpu'
 桌面与手机、首次配置、断线、部分失败、模块管理、键盘、趋势绘制和自动无障碍检查。
 
 使用 `docker compose config --quiet` 校验环境变量和挂载配置；`npm run test:docker`
-通过真实 Docker 镜像与临时本地仓库验证同步、版本链接切换和失败保留旧版本，需要
+通过真实 Docker 镜像与临时本地仓库验证同步、普通目录发布和失败保留旧版本，需要
 Docker 与 Git，首次运行需拉取镜像。这不替代 NAS 目录 ACL 和 Web Station 门户实测。
 
 ## 📌 使用须知
