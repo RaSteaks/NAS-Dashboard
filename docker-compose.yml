@@ -16,8 +16,9 @@ services:
       - "${PORT:-8080}:80"
     healthcheck:
       # IPv4 literal: busybox wget resolves localhost to ::1 first, while the
-      # default nginx server listens on 0.0.0.0 only.
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      # default nginx server listens on 0.0.0.0 only. -Y off keeps inherited
+      # http_proxy environment variables from hijacking the loopback probe.
+      test: ["CMD", "wget", "-q", "-Y", "off", "--spider", "http://127.0.0.1/"]
       interval: 30s
       timeout: 5s
       retries: 3

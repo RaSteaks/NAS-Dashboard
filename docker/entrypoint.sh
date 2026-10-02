@@ -9,7 +9,7 @@ BRANCH="${BRANCH:-main}"
 REPO_DIR="/var/www/repo"
 RETRIES="${PULL_RETRIES:-5}"
 
-git config --global --add safe.directory "$REPO_DIR"
+git config --global --replace-all safe.directory "$REPO_DIR"
 
 pull() {
   if [ ! -d "$REPO_DIR/.git" ]; then

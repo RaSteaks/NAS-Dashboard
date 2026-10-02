@@ -1422,6 +1422,9 @@ h1 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-gap);
 }
+.volume-cards > .panel-empty {
+  grid-column: 1 / -1; /* The empty state spans both card columns. */
+}
 .volume-device {
   overflow-wrap: anywhere;
 }
