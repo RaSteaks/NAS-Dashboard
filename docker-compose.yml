@@ -1,57 +1,22 @@
-# Paste this entire file into Container Manager; no host clone or build is needed.
-# Web Station serves the bind-mounted site/ directory. This container only syncs Git.
 services:
   nas-dashboard-sync:
     image: alpine/git:latest
     container_name: nas-dashboard-sync
     restart: "no"
-    environment:
-      REPO_URL: ${REPO_URL:-https://github.com/RaSteaks/NAS-Dashboard.git}
-      BRANCH: ${BRANCH:-main}
-      PULL_RETRIES: ${PULL_RETRIES:-5}
-      GIT_TERMINAL_PROMPT: "0"
     volumes:
-      # Change the host path to your dedicated, initially empty NAS folder.
-      - ${SYNC_DIR:-/volume1/docker/nas-dashboard-repo}:/repo
-    entrypoint: ["/bin/sh", "-c"]
-    # Double dollars defer shell variables to the container, not Compose.
+      # Only change the NAS path on the left; Web Station serves its site/ folder.
+      - /volume1/docker/nas-dashboard-repo:/repo
+    working_dir: /repo
+    # Exit on any error so a failed fetch never replaces the existing website.
+    entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        set -eu
         umask 022
-        REPO_DIR="$${REPO_DIR:-/repo}"
-        RETRIES="$${PULL_RETRIES:-5}"
-        case "$$RETRIES" in
-          ''|0|*[!0-9]*) echo "sync: PULL_RETRIES must be a positive integer" >&2; exit 1 ;;
-        esac
-        git config --global --replace-all safe.directory "$$REPO_DIR"
-
-        sync_repo() {
-          if [ ! -d "$$REPO_DIR/.git" ]; then
-            git clone --depth 1 -b "$$BRANCH" "$$REPO_URL" "$$REPO_DIR" || return 1
-          else
-            # Explicit returns matter: the until loop disables implicit errexit here.
-            git -C "$$REPO_DIR" remote set-url origin "$$REPO_URL" || return 1
-            git -C "$$REPO_DIR" fetch --depth 1 origin "$$BRANCH" || return 1
-            # Check the incoming layout before replacing a working website.
-            git -C "$$REPO_DIR" cat-file -e FETCH_HEAD:site/index.html || return 1
-            git -C "$$REPO_DIR" reset --hard FETCH_HEAD || return 1
-          fi
-          test -f "$$REPO_DIR/site/index.html"
-        }
-
-        attempt=1
-        until sync_repo; do
-          if [ "$$attempt" -ge "$$RETRIES" ]; then
-            echo "sync: failed after $$RETRIES attempts; see Git errors above" >&2
-            exit 1
-          fi
-          echo "sync: attempt $$attempt/$$RETRIES failed; retrying in 3s" >&2
-          attempt=$$((attempt + 1))
-          sleep 3
-        done
-
-        # Only advertise a new version after a successful sync; keep private files.
-        git -C "$$REPO_DIR" rev-parse --short HEAD > "$$REPO_DIR/site/VERSION"
-        echo "sync: complete; Web Station root is $$REPO_DIR/site (inside container)"
-        cat "$$REPO_DIR/site/VERSION"
+        git config --global --replace-all safe.directory /repo
+        if [ -d .git ]; then
+          git fetch --depth 1 origin main
+          git reset --hard FETCH_HEAD
+        else
+          git clone --depth 1 --branch main https://github.com/RaSteaks/NAS-Dashboard.git .
+        fi
+        echo "sync: complete"

@@ -27,9 +27,11 @@ on first visit; no private NAS address or credentials ship as defaults.
   stores the single checkout at a chosen NAS path (default `/volume1/docker/nas-dashboard-repo`).
   Web Station serves its `site/`; PHP/cURL remains in Web Station when needed.
   The inline shell command is the canonical implementation, also exercised by tests.
-  Each manual container start fetches the configured repository/branch, validates
-  the incoming site, and resets to FETCH_HEAD. Successful jobs exit 0; exhausted
-  retries exit 1 and failed fetches leave the previous website and VERSION intact.
+  Each manual start clones this repository on main or fetches origin/main and
+  resets to FETCH_HEAD. Shell errexit stops on failed fetches before replacing
+  site files. Successful jobs exit 0; failures exit nonzero without retries.
+  Keep the YAML minimal: no repository/branch variables, validation framework,
+  or VERSION generation. Old VERSION files are stale and must not be used.
   No nginx, HTTP port, healthcheck, named volume, or automatic restart is used.
   Never run git clean: private untracked `config/glances.php` must survive updates.
 - Demo data is explicitly enabled through settings or `?demo=1`; failures never
@@ -70,8 +72,8 @@ parsed by tests; verify the PHP/cURL runtime in Web Station before production us
 Regression coverage includes stable icon nodes, class deduplication, sibling-path
 traversal, and symlinks outside the web root.
 Compose sync regression tests execute the inline shell with temporary local Git
-repositories, covering repeat starts, repository/branch changes, retry recovery,
-failure exit status, previous-site preservation, and private configuration retention.
+repositories, covering clone/update, repeated starts, failed fetches, nonempty
+initial directories, and private configuration retention.
 Validate the standalone YAML with `docker compose config --quiet`.
 Do not claim a NAS deployment unless files and the target portal are verified.
 

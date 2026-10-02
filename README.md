@@ -266,74 +266,38 @@ HTTPS 时，上游仍可使用内网 HTTP；浏览器无需直接连接 Glances 
 下方与仓库根目录的 `docker-compose.yml` 保持一致；只复制这一份即可部署：
 
 ```yaml
-# Paste this entire file into Container Manager; no host clone or build is needed.
-# Web Station serves the bind-mounted site/ directory. This container only syncs Git.
 services:
   nas-dashboard-sync:
     image: alpine/git:latest
     container_name: nas-dashboard-sync
     restart: "no"
-    environment:
-      REPO_URL: ${REPO_URL:-https://github.com/RaSteaks/NAS-Dashboard.git}
-      BRANCH: ${BRANCH:-main}
-      PULL_RETRIES: ${PULL_RETRIES:-5}
-      GIT_TERMINAL_PROMPT: "0"
     volumes:
-      # Change the host path to your dedicated, initially empty NAS folder.
-      - ${SYNC_DIR:-/volume1/docker/nas-dashboard-repo}:/repo
-    entrypoint: ["/bin/sh", "-c"]
-    # Double dollars defer shell variables to the container, not Compose.
+      # Only change the NAS path on the left; Web Station serves its site/ folder.
+      - /volume1/docker/nas-dashboard-repo:/repo
+    working_dir: /repo
+    # Exit on any error so a failed fetch never replaces the existing website.
+    entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        set -eu
         umask 022
-        REPO_DIR="$${REPO_DIR:-/repo}"
-        RETRIES="$${PULL_RETRIES:-5}"
-        case "$$RETRIES" in
-          ''|0|*[!0-9]*) echo "sync: PULL_RETRIES must be a positive integer" >&2; exit 1 ;;
-        esac
-        git config --global --replace-all safe.directory "$$REPO_DIR"
-
-        sync_repo() {
-          if [ ! -d "$$REPO_DIR/.git" ]; then
-            git clone --depth 1 -b "$$BRANCH" "$$REPO_URL" "$$REPO_DIR" || return 1
-          else
-            # Explicit returns matter: the until loop disables implicit errexit here.
-            git -C "$$REPO_DIR" remote set-url origin "$$REPO_URL" || return 1
-            git -C "$$REPO_DIR" fetch --depth 1 origin "$$BRANCH" || return 1
-            # Check the incoming layout before replacing a working website.
-            git -C "$$REPO_DIR" cat-file -e FETCH_HEAD:site/index.html || return 1
-            git -C "$$REPO_DIR" reset --hard FETCH_HEAD || return 1
-          fi
-          test -f "$$REPO_DIR/site/index.html"
-        }
-
-        attempt=1
-        until sync_repo; do
-          if [ "$$attempt" -ge "$$RETRIES" ]; then
-            echo "sync: failed after $$RETRIES attempts; see Git errors above" >&2
-            exit 1
-          fi
-          echo "sync: attempt $$attempt/$$RETRIES failed; retrying in 3s" >&2
-          attempt=$$((attempt + 1))
-          sleep 3
-        done
-
-        # Only advertise a new version after a successful sync; keep private files.
-        git -C "$$REPO_DIR" rev-parse --short HEAD > "$$REPO_DIR/site/VERSION"
-        echo "sync: complete; Web Station root is $$REPO_DIR/site (inside container)"
-        cat "$$REPO_DIR/site/VERSION"
+        git config --global --replace-all safe.directory /repo
+        if [ -d .git ]; then
+          git fetch --depth 1 origin main
+          git reset --hard FETCH_HEAD
+        else
+          git clone --depth 1 --branch main https://github.com/RaSteaks/NAS-Dashboard.git .
+        fi
+        echo "sync: complete"
 ```
 
-`$$` 是 Compose 的转义语法，粘贴时不要改成 `$`。镜像自带 Git，无需运行
-`apk add`。镜像与挂载说明见 [alpine/git 项目](https://github.com/alpine-docker/git)、
-[Docker 绑定挂载文档](https://docs.docker.com/engine/storage/bind-mounts/) 和
-[Compose 变量转义说明](https://docs.docker.com/reference/compose-file/interpolation/)。
+只需修改挂载路径。配置固定同步本仓库的 `main` 分支，不需要环境变量或额外脚本。
+镜像自带 Git，无需安装软件；参考 [alpine/git 项目](https://github.com/alpine-docker/git)
+和 [Docker 绑定挂载文档](https://docs.docker.com/engine/storage/bind-mounts/)。
 示例使用 `latest`；需要固定镜像版本时，可换成镜像项目提供的版本标签或摘要。
 
 #### 3. 确认同步完成
 
-查看 `nas-dashboard-sync` 容器日志，应看到 `sync: complete` 和提交 ID。
+查看 `nas-dashboard-sync` 容器日志，应看到 `sync: complete`。
 容器随后显示“已停止”，**退出码 0 表示任务成功，这是正常状态**。它不是常驻
 网站服务，不需要配置健康检查或自动重启。退出码非 0 时先检查日志，不要将停止
 状态一律理解为成功。
@@ -346,7 +310,6 @@ File Station 中应出现：
 ├── config/                  ← 使用代理时，在此创建私有 glances.php
 ├── site/                    ← Web Station 文档根目录
 │   ├── index.html
-│   ├── VERSION              ← 最近一次成功同步的短提交 ID
 │   └── ...
 └── 其他仓库文件
 ```
@@ -382,18 +345,19 @@ docker logs --tail 100 nas-dashboard-sync
 docker inspect nas-dashboard-sync --format '{{.State.ExitCode}}'
 ```
 
-打开网站的 `/VERSION`，或查看 NAS 上 `site/VERSION`，可确认最近一次成功同步的
-提交。更新完成后刷新页面；覆盖站点文件期间并非原子切换，短暂读取到新旧混合
-资源时，等待同步完成后再刷新。
+更新完成后刷新页面；覆盖站点文件期间并非原子切换，短暂读取到新旧混合资源时，
+等待同步完成后再刷新。精简版不再生成 `site/VERSION`；旧版留下的文件不会更新，
+不要用它判断当前版本，以本次同步日志和退出码为准。
 
-- 默认同步 `main`。修改 `REPO_URL`、`BRANCH`、重试次数或挂载路径后，需要在
-  Container Manager 中应用新 Compose 并重新创建容器；只点击启动不会更改配置。
+- 仅支持固定仓库的 `main` 分支。代码目录应为空，或已是本仓库的检出；不要复用
+  其他仓库的目录。修改挂载路径后，在 Container Manager 应用新 Compose 并重新
+  创建容器；只点击启动不会更改配置。
 - Compose 脚本已保存在 Container Manager 项目中，仓库更新不会自动替换这份脚本。
   后续同步逻辑有变更时，需要重新粘贴新版 YAML 并应用；无需构建镜像。
-- 默认失败重试最多 5 次、间隔 3 秒，耗尽后退出码为 1。拉取失败不会重置旧检出或
-  更新 `VERSION`，已部署站点仍由 Web Station 提供；网络恢复后重新启动同步容器。
+- 失败时立即以非零退出码结束，不自动重试。拉取失败不会执行后续的文件替换，
+  已部署站点仍由 Web Station 提供；网络恢复后手动启动同步容器即可。
 - 此方案不会随 NAS 开机自动更新，也不进行定时轮询；网站服务由 Web Station 管理。
-- 同步会覆盖仓库中**已跟踪文件**的本地修改。站点定制应提交到所选仓库；脚本不执行
+- 同步会覆盖仓库中**已跟踪文件**的本地修改。本地修改需自行备份；脚本不执行
   `git clean`，未跟踪的私有 `config/glances.php` 会保留。默认面向公开仓库，私有
   仓库需要单独配置认证，不要将凭据写进 README 或提交到 Git。
 
@@ -584,8 +548,8 @@ Chrome。原生下拉菜单使用浏览器选择 API 验证，键盘测试覆盖
 PHP / cURL 运行时验证。
 
 Compose 同步脚本测试需要本机安装 Git 和 POSIX `sh`，直接执行 YAML 中的内联脚本，
-使用临时本地仓库验证首次克隆、重复启动、仓库和分支切换、失败重试、退出状态及
-私有配置保留；不需要 Docker daemon 或访问 GitHub。可单独执行
+使用临时本地仓库验证首次克隆、重复更新、失败时保留旧站点和私有配置；
+不需要 Docker daemon 或访问 GitHub。可单独执行
 `npx vitest run tests/docker.test.js`，并用 `docker compose config --quiet` 校验配置。
 这些检查不替代 NAS 上的镜像拉取、目录 ACL 和 Web Station 实际访问验证。
 
