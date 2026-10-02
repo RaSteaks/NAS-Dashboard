@@ -70,6 +70,13 @@ export function normalize(snapshot, config) {
   const temperature = (cpuSensors.length ? cpuSensors : sensors).sort(
     (a, b) => Number(b.value) - Number(a.value),
   )[0];
+  // Detail views list every temperature reading; the overview keeps only the peak.
+  const temperatureSensors = sensors
+    .map((sensor) => ({
+      label: text(sensor.label) || "未命名传感器",
+      value: /** @type {number} */ (number(sensor.value)),
+    }))
+    .sort((a, b) => b.value - a.value);
   const volumes = rows(snapshot.data.fs)
     .filter((volume) =>
       new RegExp(config.volumePattern).test(text(volume.mnt_point)),
@@ -110,6 +117,9 @@ export function normalize(snapshot, config) {
     tx: number(item.bytes_sent_rate_per_sec),
     speed: number(item.speed),
     isUp: typeof item.is_up === "boolean" ? item.is_up : null,
+    // Cumulative counters come straight from the API, never from arithmetic.
+    rxTotal: number(item.bytes_recv),
+    txTotal: number(item.bytes_sent),
   }));
   return {
     timestamp: snapshot.collectedAt,
@@ -124,9 +134,11 @@ export function normalize(snapshot, config) {
     memory: number(mem.percent),
     memoryUsed: number(mem.used),
     memoryTotal: number(mem.total),
+    memoryFree: number(mem.free),
     load: [number(load.min1), number(load.min5), number(load.min15)],
     temperature: temperature ? number(temperature.value) : null,
     temperatureLabel: temperature ? text(temperature.label) : "",
+    sensors: temperatureSensors,
     volumes,
     interfaces: network,
     rx: total(network.map((item) => item.rx)),

@@ -8,6 +8,7 @@ import {
   validateApi,
 } from "../site/js/core/config.js";
 import { fetchSnapshot } from "../site/js/core/api.js";
+import { bitrate } from "../site/js/core/format.js";
 import { normalize } from "../site/js/core/metrics.js";
 import { Poller } from "../site/js/core/poller.js";
 import { requiredPlugins } from "../site/js/widgets/index.js";
@@ -148,6 +149,58 @@ describe("Glances normalization", () => {
     );
     expect(result.containers[0].image).toBe("nicolargo/glances:latest-full");
     expect(result.containers[0]).not.toHaveProperty("command");
+  });
+  it("exposes every temperature sensor for detail views, hottest first", () => {
+    const result = normalize(
+      snapshot({
+        sensors: [
+          { label: "CPU Package", type: "temperature_core", value: 44 },
+          { label: "Disk 0", type: "temperature_hdd", value: 51 },
+          { label: "fan", type: "fan_speed", value: 1000 },
+          { label: "broken", type: "temperature_core", value: null },
+        ],
+      }),
+      defaults,
+    );
+    expect(result.sensors).toEqual([
+      { label: "Disk 0", value: 51 },
+      { label: "CPU Package", value: 44 },
+    ]);
+  });
+  it("carries memory free space and interface counters for detail views", () => {
+    const result = normalize(
+      snapshot({
+        mem: { percent: 42.5, used: 7, total: 16, free: 9 },
+        network: [
+          {
+            interface_name: "eth0",
+            bytes_recv_rate_per_sec: 12,
+            bytes_sent_rate_per_sec: 6,
+            bytes_recv: 900,
+            bytes_sent: 450,
+            speed: 1000000000,
+            is_up: true,
+          },
+        ],
+      }),
+      defaults,
+    );
+    expect(result.memoryFree).toBe(9);
+    expect(result.interfaces[0]).toMatchObject({
+      name: "eth0",
+      rxTotal: 900,
+      txTotal: 450,
+      speed: 1000000000,
+      isUp: true,
+    });
+  });
+});
+
+describe("detail formatting", () => {
+  it("scales link speed to readable bit units", () => {
+    expect(bitrate(1e9)).toBe("1.0 Gbit/s");
+    expect(bitrate(125 * 1e6)).toBe("125.0 Mbit/s");
+    expect(bitrate(null)).toBe("--");
   });
 });
 

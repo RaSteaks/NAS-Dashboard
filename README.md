@@ -21,12 +21,15 @@
 
 ## ✨ 功能一览
 
-| 模块        | 内容                                                     |
-| ----------- | -------------------------------------------------------- |
-| 🖥️ 系统资源 | CPU、内存、1/5/15 分钟负载、已提供的温度传感器           |
-| 💾 存储卷   | 容量、已用与剩余空间，默认筛选 `/volume1`、`/volume2` 等 |
-| 🌐 网络     | 每秒收发速率、接口筛选，以及 CPU / 内存 / 网络趋势图     |
-| 📦 容器     | 运行与健康状态、CPU、内存，支持状态筛选和分页            |
+页面分为运行概览与四个分类详情页，导航切换视图（`#resources` 等 hash 路由），
+移动端在顶栏下方提供横向视图切换条：
+
+| 模块        | 概览摘要               | 详情页追加内容                                                       |
+| ----------- | ---------------------- | -------------------------------------------------------------------- |
+| 🖥️ 系统资源 | 指标卡 + CPU/内存趋势  | CPU 用户态/内核态/I/O 等待分解、全部温度传感器、系统信息、独立趋势图 |
+| 💾 存储卷   | 各卷容量列表           | 总容量/已用/可用汇总、每卷设备名与文件系统明细                       |
+| 🌐 网络     | 收发速率趋势与接口筛选 | 接口明细表：链路状态、速率、链路速度、累计收发字节                   |
+| 📦 容器     | 状态/CPU/内存表格      | 运行汇总（总数/运行中/CPU 与内存合计）、可排序明细表                 |
 
 所有模块共享：
 
@@ -93,10 +96,12 @@ npm run dev                  # 填写后（重新）启动开发服务
 
 ### 部署前置
 
-1. 在套件中心安装 **Web Station**；方案 B 还需确认 PHP（8.1+）已安装，并在
-   Web Station → PHP 设置中启用 `curl` 扩展。
+1. 在套件中心安装 **Web Station**；方案 B 还需安装 PHP（8.1+），并在
+   Web Station → 脚本语言设置 → PHP 中，为网站实际使用的配置文件启用 `curl`
+   扩展。
 2. 规划 NAS 上的目录，例如 `/volume3/Video/web/nas-dashboard/`，并确认要使用的
-   门户端口未被占用。
+   门户端口未被占用。避开浏览器限制访问的端口，如 `6000`；自定义门户可选择
+   未占用的 `6080` 等端口。
 3. NAS 已运行 Glances Web 模式并记下地址（`http://NAS-IP:61208/api/4`）。常见
    安装方式：Docker 镜像 `nicolargo/glances`（设置 `GLANCES_OPT=-w`）或通过
    套件 / 包管理器安装。
@@ -164,10 +169,19 @@ flowchart LR
     D --> E["⚙️ 页面设置选择同源代理<br/>填写 ./api/index.php，测试并保存"]
 ```
 
-1. 创建 Web Station 原生脚本语言网站，使用 PHP 8.1+，启用 `curl` 扩展。
-2. 文档根目录指向 NAS 上的 `site` 目录（名称可自定），不需要修改 DSM nginx
-   配置。
-3. 保持以下布局，`config/` 必须位于所有公开网页根目录之外：
+如果已有服务的编辑窗口标题是“编辑静态网站”，需要另建 PHP 网页服务。安装 PHP
+不会自动改变静态网站的服务类型；“HTTP 后端服务器”可继续使用 Nginx，PHP 配置
+在“原生脚本语言网站”中选择。“同源代理”则是监控面板中的连接方式。
+
+1. 在 Web Station → 脚本语言设置 → PHP 中，创建或编辑 PHP 8.1+ 配置文件，
+   在“扩展”选项卡勾选 `curl` 并保存。记下该配置文件的名称。
+2. 在网页服务 → 新增 / 创建中，选择“原生脚本语言网站”→ PHP，服务名称可填
+   `dashboard-php`，并选择上一步的 PHP 配置文件。
+3. 文档根目录指向 NAS 上的 `site` 目录（名称可自定），其中应直接包含
+   `index.html` 与 `api/`；HTTP 后端服务器可选择 Nginx。
+4. 在网页门户 → 创建 → 网页服务门户中，关联 `dashboard-php` 服务，按需配置
+   HTTP / HTTPS 域名与端口。打开这个 PHP 服务对应的门户进行后续测试。
+5. 保持以下布局，`config/` 必须位于所有公开网页根目录之外：
 
    ```text
    /volume3/Video/web/nas-dashboard/
@@ -183,12 +197,31 @@ flowchart LR
        └── api/index.php
    ```
 
-4. 使用仓库中的 `config/glances.example.php` 创建私有 `config/glances.php`，填写
-   `api_url`。需要上游认证时，填写 `username` / `password` 或 `token`。
-5. 允许 PHP 读取这个配置路径，包括 `open_basedir` 和 `http` 组读取权限；不要把
-   私有配置复制进 `site/`。也可通过服务端环境变量 `GLANCES_CONFIG` 指定其他私有
+6. 使用仓库中的 `config/glances.example.php` 创建私有 `config/glances.php`，填写
+   `api_url`。最小配置如下；将 `NAS-IP` 替换为 PHP 服务能访问的 Glances 主机地址：
+
+   ```php
+   <?php
+   // 私有配置放在 site/ 外，由 NAS 上的 PHP 访问内网 Glances。
+   return [
+       'api_url' => 'http://NAS-IP:61208/api/4',
+   ];
+   ```
+
+   Glances 默认提供 HTTP API，按实际协议填写。若 PHP 与 Glances 位于同一台 NAS
+   且接口可通过回环地址访问，也可使用 `http://127.0.0.1:61208/api/4`；这里的
+   `127.0.0.1` 指 PHP 所在的运行环境。需要上游认证时，在私有配置中填写
+   `username` / `password` 或 `token`。
+
+7. 允许 PHP 读取这个配置路径，包括 `open_basedir` 和 `http` 组读取权限。在当前
+   PHP 配置文件中保留已有的允许路径，并添加私有 `config/` 的实际绝对路径；多个
+   路径使用冒号分隔。也可通过服务端环境变量 `GLANCES_CONFIG` 指定其他私有
    绝对路径。
-6. 页面设置选择"同源代理"，填写 `./api/index.php`，测试并保存。
+8. 在监控面板 → 监控设置中选择“同源代理”，地址填写 `./api/index.php`，点击
+   “测试连接”，成功后保存。
+
+这条链路由浏览器访问面板同源的代理，再由 NAS 上的 PHP 访问 Glances。面板使用
+HTTPS 时，上游仍可使用内网 HTTP；浏览器无需直接连接 Glances 的内网 IP。
 
 代理安全边界：
 
@@ -208,31 +241,110 @@ flowchart LR
 
 ### 页面无法打开
 
-| 现象                       | 可能原因                                                  | 处理方式                                      |
-| -------------------------- | --------------------------------------------------------- | --------------------------------------------- |
-| 门户 403 / 404             | Web Station 未启用、文档根目录指错、`http` 组没有读取权限 | 检查 Web Station 服务状态、门户与共享目录权限 |
-| 页面能打开但样式或脚本 404 | 只上传了部分文件                                          | 完整上传 `site/`，包括 `js/` 与 `vendor/`     |
+| 现象                         | 可能原因                                                  | 处理方式                                           |
+| ---------------------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| 打开后地址栏是 `about:blank` | 新标签页没有完成导航，需检查门户链接和浏览器端口限制      | 手动输入门户实际 URL，按下面步骤检查端口与访问方式 |
+| 浏览器报 `ERR_UNSAFE_PORT`   | 门户使用了 `6000` 等浏览器限制访问的端口                  | 将门户端口改为未占用的 `6080` 等允许访问的端口     |
+| 门户 403 / 404               | Web Station 未启用、文档根目录指错、`http` 组没有读取权限 | 检查 Web Station 服务状态、门户与共享目录权限      |
+| 页面能打开但样式或脚本 404   | 只上传了部分文件                                          | 完整上传 `site/`，包括 `js/` 与 `vendor/`          |
+
+#### `about:blank` / `ERR_UNSAFE_PORT` 排查步骤
+
+1. 检查网页门户的协议、域名与端口。`6000` 在浏览器限制端口列表中，Chromium
+   访问时会报 `ERR_UNSAFE_PORT`，新标签页可能停在 `about:blank`。将对应门户
+   端口改为未占用的 `6080` 等允许访问的端口；HTTP 与 HTTPS 都受端口限制影响。
+2. 手动输入实际门户地址：基于端口的 HTTP 门户可使用
+   `http://NAS-IP:6080/`；基于主机名称的门户使用其绑定的域名，并匹配所配置的
+   协议与端口。
+3. 若访问仍返回 403 / 404，检查门户绑定的网页服务、文档根目录是否直接包含
+   `index.html`，以及 `http` 组的读取权限。仓库首页位于 `site/index.html`，
+   所以文档根目录通常应指向 `nas-dashboard/site/`。
+4. 在同一门户下检查 `index.html`、`styles.css`、`js/main.js` 和 `config.json`
+   是否正常返回。`config.json` 返回 JSON 只说明这个静态文件可访问，PHP 代理与
+   Glances 连接还需单独验证。
+
+站点没有主动跳转到 `about:blank` 的逻辑，首屏骨架直接写在 `index.html` 中。
+终端 `curl` 不使用浏览器的限制端口列表；浏览器端口拦截与服务端 404 可以同时
+存在，因此 `curl` 能连接端口并不代表浏览器能访问，改端口后仍需确认首页正常。
+端口限制依据见 [Fetch 标准](https://fetch.spec.whatwg.org/#port-blocking)。
 
 ### 连接失败（方案 A 直连）
 
-| 现象                          | 可能原因                                                  | 处理方式                                                  |
-| ----------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
-| “测试连接”失败                | Glances 未以 Web 模式运行、端口不对、防火墙未放行 `61208` | 先用浏览器直接打开 `http://NAS-IP:61208` 验证再回面板保存 |
-| 控制台报 CORS 跨域错误        | Glances 的跨域配置拒绝了面板门户这个来源                  | 检查 Glances 配置的 `[cors]` 允许来源，或改用方案 B       |
-| HTTPS 门户下请求被浏览器拦截  | 混合内容：HTTPS 页面不能请求 HTTP API                     | 为 Glances 启用 HTTPS，或改用同源代理（方案 B）           |
-| Glances 开启认证后无法使用    | 直连模式没有安全保存凭据的位置                            | 改用方案 B，凭据只存在服务端的私有配置里                  |
-| 地址能保存但所有指标都是 `--` | 保存时未先测试，实际连不上或 API 版本路径不对             | 在设置中“测试连接”，确认路径为 Glances 4 的 `/api/4`      |
+| 现象                                         | 可能原因                                                  | 处理方式                                                       |
+| -------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------- |
+| “测试连接”失败                               | Glances 未以 Web 模式运行、端口不对、防火墙未放行 `61208` | 先用浏览器直接打开 `http://NAS-IP:61208` 验证再回面板保存      |
+| 控制台报 CORS 跨域错误                       | Glances 的跨域配置拒绝了面板门户这个来源                  | 检查 Glances 配置的 `[cors]` 允许来源，或改用方案 B            |
+| HTTPS 门户下请求被浏览器拦截                 | 混合内容：HTTPS 页面不能请求 HTTP API                     | 为 Glances 启用 HTTPS，或改用同源代理（方案 B）                |
+| 填写 `https://NAS-IP:61208/api/4` 后连接失败 | Glances 实际提供 HTTP，HTTPS 握手失败                     | 按实际协议填写；HTTPS 面板使用方案 B，由 PHP 连接内网 HTTP API |
+| Glances 开启认证后无法使用                   | 直连模式没有安全保存凭据的位置                            | 改用方案 B，凭据只存在服务端的私有配置里                       |
+| 地址能保存但所有指标都是 `--`                | 保存时未先测试，实际连不上或 API 版本路径不对             | 在设置中“测试连接”，确认路径为 Glances 4 的 `/api/4`           |
+
+可先在能访问 NAS 的终端确认 Glances 接口，例如：
+
+```sh
+curl -i 'http://NAS-IP:61208/api/4/cpu'
+```
+
+将 `NAS-IP` 替换为实际地址，确认响应为 HTTP 200 和 JSON。仅把输入中的 `http://`
+改成 `https://` 不会让服务启用 TLS。HTTP 面板可直接使用这个 HTTP API 地址；
+HTTPS 面板应使用已配置 HTTPS 的 API，或按方案 B 配置同源代理。
 
 ### PHP 同源代理（方案 B）
 
 | 现象                                                   | 可能原因                                                | 处理方式                                                            |
 | ------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------- |
-| 响应 503 `Enable the PHP curl extension`               | PHP 未启用 curl 扩展                                    | Web Station 的 PHP 设置中启用 curl                                  |
+| 面板提示“代理尚未配置或未启用 PHP / cURL”              | 前端对 HTTP 503 使用统一提示，需查看接口的具体错误      | 在当前门户下访问 `api/index.php?plugins=cpu,mem`，读取 `error` 字段 |
+| 接口显示 PHP 源码、下载 PHP 文件或未返回 JSON          | 当前门户未正确执行 PHP                                  | 核对门户关联的原生脚本语言网站及其 PHP 配置                         |
+| 响应 503 `Enable the PHP curl extension`               | 当前服务的 PHP 配置未启用 curl 扩展                     | 在网站实际使用的 PHP 配置文件中启用 curl                            |
 | 响应 503 `Configure the Glances API URL on the server` | 读不到 `config/glances.php`，或 `api_url` 缺协议 / 主机 | 文件放在 `site/` 之外；确认 `open_basedir` 允许读取；核对 `api_url` |
 | 响应 503 `Invalid server configuration`                | 配置文件不是返回数组的 PHP 文件                         | 对照 `config/glances.example.php` 重写                              |
+| 代理提示“Glances 返回 HTTP 503”，内网直连正常          | NAS 的网络代理可能拦截了内网请求                        | 在 NAS 上比较普通请求与 `curl --noproxy '*'`，按下面步骤处理        |
 | 部分插件提示“Glances 无法连接或响应超时”               | 代理连不上上游（连接超时 2 秒）                         | 在 NAS 上执行 `curl http://127.0.0.1:61208/api/4/cpu` 验证          |
 | 上游 HTTPS 报证书错误                                  | 代理强制校验上游证书，自签名证书会失败                  | 内网改用 HTTP 上游，或为上游配置受信任的证书                        |
 | 响应 400 `Unsupported monitoring plugin`               | `plugins` 参数超出只读白名单                            | 正常由页面发起不会出现；手动调试请用白名单内的插件名                |
+
+#### PHP 已安装，但仍提示“代理尚未配置或未启用 PHP / cURL”
+
+1. 在当前面板所在的 URL 目录后加上 `api/index.php?plugins=cpu,mem`，直接访问
+   代理诊断接口。前端的提示对应 HTTP 503，具体原因以响应里的 `error` 字段为准。
+2. 如果响应如下，说明 PHP 已经执行，但运行该接口的 PHP 配置未加载 `curl`：
+
+   ```json
+   { "error": "Enable the PHP curl extension in Web Station." }
+   ```
+
+3. 在 Web Station → 网页服务中编辑当前 PHP 网站，查看其绑定的 PHP 配置文件
+   名称。再进入脚本语言设置 → PHP，编辑**同一个配置文件**，在“扩展”中勾选
+   `curl` 并保存，回到面板重新测试连接。
+4. `curl` 检查发生在读取 Glances 配置之前。若启用后错误变为
+   `Configure the Glances API URL on the server.`，继续检查私有
+   `config/glances.php`、`api_url`、`open_basedir` 与读取权限。
+5. 成功时，诊断接口应返回 HTTP 200，`data.cpu` 和 `data.mem` 包含有效指标，
+   `errors` 为空对象 `{}`；再回到面板测试并保存。仅返回 HTTP 200 或 JSON 并不
+   代表上游连接成功，还需检查其中的 `errors`。
+
+#### Glances 返回 HTTP 503，但内网接口正常
+
+在 **NAS 的终端**执行以下两条命令，将 `NAS-IP` 替换为实际 Glances 主机地址：
+
+```sh
+curl --connect-timeout 3 --max-time 8 -i 'http://NAS-IP:61208/api/4/cpu'
+curl --noproxy '*' --connect-timeout 3 --max-time 8 -i 'http://NAS-IP:61208/api/4/cpu'
+```
+
+如果普通请求返回 HTTP 503，绕过代理后返回 HTTP 200 和 Glances JSON，说明请求
+经过的网络代理导致了失败。PHP cURL 也可能继承 `http_proxy`、`all_proxy` 等环境
+设置，因此电脑直连成功时，NAS 上的 PHP 请求仍可能失败。
+
+本项目的 PHP 接口对 `localhost`、私有及保留 IP 地址使用 `CURLOPT_NOPROXY`，
+让配置的 Glances 主机直接连接。IPv4 / IPv6 均支持，公网 IP 和其他主机名称仍
+沿用环境中的代理设置。使用内网域名时，可在 PHP 服务的 `NO_PROXY` 中添加该
+主机，或改用其实际内网 IP。选项行为见
+[libcurl 文档](https://curl.se/libcurl/c/CURLOPT_NOPROXY.html)。
+
+旧版本部署需要更新 NAS 文档根目录下的 `api/index.php`，然后重新访问
+`api/index.php?plugins=cpu,mem`；确认 `data.cpu`、`data.mem` 有效且 `errors` 为
+`{}`，再在面板中测试并保存连接。
 
 ### 数据缺失或显示 `--`
 
@@ -274,8 +386,10 @@ flowchart LR
 
 1. 在 `site/js/core/types.js` 补充 JSDoc 类型，并实现 `WidgetDefinition`。
 2. 注册到 `site/js/widgets/index.js`；模块声明 `plugins`，请求层会自动合并依赖。
-3. 新增模块 ID 时，同步更新类型定义和默认配置。
-4. 类型以 JSDoc 注解表达，`npm run typecheck` 用 tsc 做零产物校验，没有编译步骤。
+3. 需要配套详情页时，在 `site/js/views/` 实现 `ViewDefinition` 并注册到
+   `site/js/views/index.js`；视图复用同一轮询数据，首次导航时才挂载。
+4. 新增模块 ID 时，同步更新类型定义和默认配置。
+5. 类型以 JSDoc 注解表达，`npm run typecheck` 用 tsc 做零产物校验，没有编译步骤。
 
 新增一个 Glances API 插件时，同步更新 PHP 代理与开发代理的允许列表。
 全局规范见 `AGENT.md`，视觉与交互约定见 `DESIGN.md`。
@@ -314,6 +428,10 @@ PHP / cURL 运行时验证。
 
 - [Glances 官方 REST API 文档](https://glances.readthedocs.io/en/latest/api/restful.html)
 - [Synology Web Station 部署文档](https://kb.synology.com/en-id/DSM/tutorial/How_to_host_a_website_on_Synology_NAS)
+- [Synology Web Station 网页服务类型](https://kb.synology.com/index.php/zh-hk/DSM/help/WebStation/application_webserv_webservice?version=7)
+- [Synology Web Station PHP 配置与扩展](https://kb.synology.com/index.php/en-us/DSM/help/WebStation/application_webserv_php?version=7)
+- [Fetch 标准：浏览器端口限制](https://fetch.spec.whatwg.org/#port-blocking)
+- [MDN：HTTPS 页面中的混合内容限制](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content)
 
 ---
 

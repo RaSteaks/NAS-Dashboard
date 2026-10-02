@@ -31,6 +31,19 @@ export function bytes(value, rate = false) {
 }
 
 /**
+ * @param {number|null} bitsPerSecond
+ * @returns {string}
+ */
+export function bitrate(bitsPerSecond) {
+  // Glances reports link speed in bits per second; scale to a readable unit.
+  if (bitsPerSecond === null) return "--";
+  if (bitsPerSecond >= 1e9) return `${decimal(bitsPerSecond / 1e9)} Gbit/s`;
+  if (bitsPerSecond >= 1e6) return `${decimal(bitsPerSecond / 1e6)} Mbit/s`;
+  if (bitsPerSecond >= 1e3) return `${decimal(bitsPerSecond / 1e3)} Kbit/s`;
+  return `${decimal(bitsPerSecond, 0)} bit/s`;
+}
+
+/**
  * @param {number} timestamp
  * @returns {string}
  */

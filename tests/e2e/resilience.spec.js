@@ -68,7 +68,9 @@ test("long labels fit and native filters preserve focus and selection", async ({
   // Native macOS menu input is outside CDP; Playwright's selectOption owns this step.
   await filter.selectOption("running");
   await expect(filter).toHaveValue("running");
-  await expect(page.locator("#containers")).not.toContainText("backup-worker");
+  await expect(page.locator("#widget-containers")).not.toContainText(
+    "backup-worker",
+  );
   await page.getByRole("button", { name: "管理监控模块" }).click();
   await page
     .getByLabel("设备名称", { exact: true })

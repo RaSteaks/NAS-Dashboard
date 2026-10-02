@@ -104,6 +104,52 @@ export function panelHeading(title, iconName, status, ...actions) {
 }
 
 /**
+ * A detail card frame: quiet heading with icon plus an open body area.
+ *
+ * @param {string} title
+ * @param {string} iconName
+ * @returns {{card: HTMLElement, body: HTMLElement}}
+ */
+export function detailCard(title, iconName) {
+  const body = el("div", { class: "detail-card-body" });
+  const card = el(
+    "article",
+    { class: "detail-card" },
+    el(
+      "div",
+      { class: "detail-card-heading" },
+      el("h3", {}, icon(iconName), title),
+    ),
+    body,
+  );
+  return { card, body };
+}
+
+/**
+ * Trend window segmented control. Buttons carry data-window so the shared
+ * click handler and pressed-state sync cover every copy at once.
+ *
+ * @param {string} [label="趋势时间范围"]
+ * @returns {HTMLElement}
+ */
+export function windowControl(label = "趋势时间范围") {
+  return el(
+    "div",
+    { class: "segmented-control", role: "group", "aria-label": label },
+    el(
+      "button",
+      { type: "button", "data-window": "5", "aria-pressed": "false" },
+      "5 分钟",
+    ),
+    el(
+      "button",
+      { type: "button", "data-window": "15", "aria-pressed": "false" },
+      "15 分钟",
+    ),
+  );
+}
+
+/**
  * @param {string[]} errors
  * @param {boolean} [empty=false]
  * @returns {{text: string, tone: string}}

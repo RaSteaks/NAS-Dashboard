@@ -32,6 +32,7 @@ export function demoSnapshot(timestamp = Date.now()) {
         percent: 42.8 + Math.sin(wave / 40),
         used: 6.85 * GIB,
         total: 16 * GIB,
+        free: 9.15 * GIB,
       },
       load: { min1: 0.62, min5: 0.48, min15: 0.39, cpucore: 4 },
       sensors: [
@@ -39,6 +40,16 @@ export function demoSnapshot(timestamp = Date.now()) {
           label: "CPU Package",
           type: "temperature_core",
           value: 43 + Math.round(Math.sin(wave / 30)),
+        },
+        {
+          label: "M.2 SSD",
+          type: "temperature_core",
+          value: 39 + Math.round(Math.sin(wave / 45)),
+        },
+        {
+          label: "Disk 0",
+          type: "temperature_hdd",
+          value: 36,
         },
       ],
       fs: [
@@ -67,6 +78,19 @@ export function demoSnapshot(timestamp = Date.now()) {
           bytes_recv_rate_per_sec:
             (2.4 + Math.sin(wave / 13) * 1.8) * 1024 ** 2,
           bytes_sent_rate_per_sec: (0.7 + Math.sin(wave / 9) * 0.4) * 1024 ** 2,
+          bytes_recv: 812.6 * GIB,
+          bytes_sent: 154.2 * GIB,
+          speed: 1000000000,
+          is_up: true,
+        },
+        {
+          interface_name: "eth1",
+          bytes_recv_rate_per_sec:
+            (0.3 + Math.sin(wave / 21) * 0.2) * 1024 ** 2,
+          bytes_sent_rate_per_sec:
+            (0.1 + Math.sin(wave / 17) * 0.05) * 1024 ** 2,
+          bytes_recv: 96.4 * GIB,
+          bytes_sent: 48.9 * GIB,
           speed: 1000000000,
           is_up: true,
         },
@@ -139,12 +163,21 @@ export function demoHistory() {
       /** @type {{bytes_recv_rate_per_sec: number, bytes_sent_rate_per_sec: number}[]} */ (
         snapshot.data.network
       );
+    // The aggregate matches live sampling, which sums every interface.
+    const rx = network.reduce(
+      (sum, item) => sum + item.bytes_recv_rate_per_sec,
+      0,
+    );
+    const tx = network.reduce(
+      (sum, item) => sum + item.bytes_sent_rate_per_sec,
+      0,
+    );
     return {
       timestamp,
       cpu: cpu.total,
       memory: mem.percent,
-      rx: network[0].bytes_recv_rate_per_sec,
-      tx: network[0].bytes_sent_rate_per_sec,
+      rx,
+      tx,
     };
   });
 }

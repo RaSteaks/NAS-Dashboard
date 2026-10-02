@@ -13,6 +13,9 @@ on first visit; no private NAS address or credentials ship as defaults.
   data. Deploy by copying `site/`; there is no compile step.
 - `site/js/core/` owns configuration, transport, normalization, polling, and formatting.
 - `site/js/widgets/` registers modules with explicit Glances plugin dependencies.
+- `site/js/views/` expands enabled modules into hash-routed detail views with
+  deeper telemetry; views reuse the same polling data and mount lazily on first
+  navigation, adding no extra plugin requests.
 - `site/js/ui/` owns safe DOM rendering and Chart.js integration; icons come from
   `site/js/ui/icons.js`.
 - Browser preferences are versioned in localStorage. Credentials stay server-side.
@@ -36,6 +39,9 @@ on first visit; no private NAS address or credentials ship as defaults.
 - Icon hydration initializes only new placeholders; existing SVGs survive refreshes.
 - The Chart.js UMD bundle registers its own controllers and plugins.
 - Local preview checks both decoded paths and symlink targets against `site/`.
+- PHP requests to localhost or literal private/reserved IP addresses bypass inherited
+  network proxies for that upstream host. Public IPs and other hostnames retain
+  environment proxy settings; TLS verification and the fixed-upstream boundary remain enforced.
 
 ## Extension Plan
 

@@ -4,6 +4,7 @@
 /** @typedef {import("./core/types.js").HistoryPoint} HistoryPoint */
 /** @typedef {import("./core/types.js").Metrics} Metrics */
 /** @typedef {import("./core/types.js").Snapshot} Snapshot */
+/** @typedef {import("./core/types.js").ViewDefinition} ViewDefinition */
 /** @typedef {import("./core/types.js").WidgetContext} WidgetContext */
 /** @typedef {import("./core/types.js").WidgetDefinition} WidgetDefinition */
 /** @typedef {import("./core/types.js").WidgetId} WidgetId */
@@ -21,12 +22,14 @@ import { normalize } from "./core/metrics.js";
 import { Poller } from "./core/poller.js";
 import { $, el, icon, icons, setText } from "./ui/dom.js";
 import { requiredPlugins, widgets } from "./widgets/index.js";
+import { detailViews, viewMeta } from "./views/index.js";
 
 /** @type {Config} */
 let config = structuredClone(defaults);
 let demo = new URL(location.href).searchParams.get("demo") === "1";
 let paused = false;
 let windowMinutes = 15;
+let currentView = "overview";
 /** @type {import("./core/poller.js").Poller|undefined} */
 let poller;
 /** @type {Snapshot|undefined} */
@@ -47,6 +50,9 @@ let testController;
 let returnFocus;
 /** @type {Map<WidgetId, ReturnType<WidgetDefinition["mount"]>>} */
 const mounted = new Map();
+/** @type {Map<string, ReturnType<ViewDefinition["mount"]>>} */
+const viewInstances = new Map();
+const viewIds = new Set(["overview", ...detailViews.map((view) => view.id)]);
 const dialog = $("settings-dialog", HTMLDialogElement);
 
 /**
@@ -204,7 +210,7 @@ function renderOverview(current) {
   }
 }
 
-function renderWidgets() {
+function renderAll() {
   if (!snapshot || !metrics) return;
   /** @type {WidgetContext} */
   const context = {
@@ -215,6 +221,75 @@ function renderWidgets() {
     windowMinutes,
   };
   for (const widget of mounted.values()) widget.update(context);
+  for (const view of viewInstances.values()) view.update(context);
+  icons();
+}
+
+/** Sync every trend window copy after lazy views add their own buttons. */
+function syncWindowButtons() {
+  for (const item of /** @type {NodeListOf<HTMLButtonElement>} */ (
+    document.querySelectorAll("[data-window]")
+  ))
+    item.setAttribute(
+      "aria-pressed",
+      String(Number(item.dataset.window) === windowMinutes),
+    );
+}
+
+/**
+ * @param {string} id
+ * @returns {boolean}
+ */
+function viewEnabled(id) {
+  // Detail views depend on their widget's plugins; disabled modules fall back.
+  return (
+    id === "overview" || config.widgets.includes(/** @type {WidgetId} */ (id))
+  );
+}
+
+/**
+ * @returns {string}
+ */
+function currentRoute() {
+  const id = location.hash.slice(1);
+  return viewIds.has(id) ? id : "overview";
+}
+
+/**
+ * Switch the visible view. Mounts happen after reveal so charts measure a
+ * real container; scroll only on user navigation, not on reconnects.
+ *
+ * @param {string} id
+ * @param {boolean} [scroll=true]
+ */
+function showView(id, scroll = true) {
+  if (!viewIds.has(id) || !viewEnabled(id)) id = "overview";
+  currentView = id;
+  for (const section of /** @type {NodeListOf<HTMLElement>} */ (
+    document.querySelectorAll(".view")
+  ))
+    section.hidden = section.dataset.view !== id;
+  if (id !== "overview" && !viewInstances.has(id)) {
+    const definition = detailViews.find((view) => view.id === id);
+    const host = document.getElementById(`view-${id}`);
+    if (definition && host) viewInstances.set(id, definition.mount(host));
+    syncWindowButtons();
+  }
+  const meta = viewMeta(id);
+  setText("page-eyebrow", meta.eyebrow);
+  setText("page-title-text", meta.title);
+  setText("page-description", meta.description);
+  setText("breadcrumb-view", meta.title);
+  document.title = `${config.name} · ${meta.title}${demo ? " · 演示" : ""}`;
+  // Sidebar and mobile strip carry the same routes; both reflect the state.
+  for (const link of document.querySelectorAll(".nav-links a, .mobile-nav a")) {
+    const active = link.getAttribute("href") === `#${id}`;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  renderAll();
+  if (scroll) window.scrollTo(0, 0);
   icons();
 }
 
@@ -225,13 +300,14 @@ function mountWidgets() {
   grid.replaceChildren();
   for (const definition of widgets) {
     const enabled = config.widgets.includes(definition.id);
-    const link = /** @type {HTMLAnchorElement|null} */ (
-      document.querySelector(`a[href="#${definition.id}"]`)
-    );
-    if (link) link.hidden = !enabled;
+    for (const link of /** @type {NodeListOf<HTMLAnchorElement>} */ (
+      document.querySelectorAll(`a[href="#${definition.id}"]`)
+    ))
+      link.hidden = !enabled;
     if (!enabled) continue;
+    // Widget sections use a widget- prefix; the bare id belongs to the view.
     const section = el("section", {
-      id: definition.id,
+      id: `widget-${definition.id}`,
       class: `widget-panel widget-${definition.id}`,
       "aria-label": definition.title,
     });
@@ -304,7 +380,7 @@ function receive(next) {
       point.timestamp >= next.collectedAt - config.historyMinutes * 60000,
   );
   renderOverview(metrics);
-  renderWidgets();
+  renderAll();
   renderConnection();
 }
 
@@ -318,14 +394,20 @@ function connect() {
   metrics = undefined;
   lastSuccess = 0;
   history = demo ? demoHistory() : [];
+  // Views keep local sample buffers (per-interface history, sort, paging);
+  // destroying them here keeps reconnects from mixing data sources.
+  viewInstances.forEach((view) => view.destroy());
+  viewInstances.clear();
   connection = config.api.url || demo ? "loading" : "idle";
   renderOverview(normalize({ data: {}, errors: {}, collectedAt: 0 }, config));
   mountWidgets();
   setText("device-name", config.name);
   setText("breadcrumb-name", config.name);
   setText("device-subtitle", config.subtitle);
-  document.title = `${config.name} · 运行概览${demo ? " · 演示" : ""}`;
+  document.title = `${config.name} · ${viewMeta(currentView).title}${demo ? " · 演示" : ""}`;
   renderConnection();
+  // Revalidate the route: a just-disabled module must fall back to overview.
+  showView(currentRoute(), false);
   if (!demo && !config.api.url) return;
   const instance = new Poller({
     intervalMs: config.refreshSeconds * 1000,
@@ -578,23 +660,17 @@ $("pause-button", HTMLElement).addEventListener("click", () => {
   else if (!document.hidden) poller?.start();
   renderConnection();
 });
-for (const button of /** @type {NodeListOf<HTMLButtonElement>} */ (
-  document.querySelectorAll("[data-window]")
-))
-  button.addEventListener("click", () => {
-    windowMinutes = Number(button.dataset.window);
-    for (const item of document.querySelectorAll("[data-window]"))
-      item.setAttribute("aria-pressed", String(item === button));
-    renderWidgets();
-  });
-for (const link of document.querySelectorAll(".nav-links a"))
-  link.addEventListener("click", () => {
-    for (const item of document.querySelectorAll(".nav-links a")) {
-      item.classList.toggle("active", item === link);
-      if (item === link) item.setAttribute("aria-current", "location");
-      else item.removeAttribute("aria-current");
-    }
-  });
+// Delegated so trend window buttons inside lazily mounted views also work.
+document.addEventListener("click", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const button = target?.closest("[data-window]");
+  if (!(button instanceof HTMLButtonElement)) return;
+  windowMinutes = Number(button.dataset.window);
+  syncWindowButtons();
+  renderAll();
+});
+// Navigation is hash-routed; views switch instead of scrolling to widgets.
+window.addEventListener("hashchange", () => showView(currentRoute()));
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) poller?.stop();
   else if (!paused) poller?.start();

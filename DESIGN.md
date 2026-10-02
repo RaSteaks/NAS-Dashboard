@@ -100,10 +100,15 @@ with viewport width. Long hostnames and container names wrap without clipping.
 ## Layout
 
 The 220px desktop sidebar narrows to an icon rail at 850px and a compact header at
-680px. Content uses natural document scrolling and a 1600px maximum width. Four
+680px, where a horizontal view strip under the topbar replaces the hidden sidebar
+links. Navigation switches between the overview and hash-routed detail views
+(`#resources`, `#storage`, `#network`, `#containers`) instead of scrolling.
+Content uses natural document scrolling and a 1600px maximum width. Four
 resource cards become two columns on mobile. Monitoring widgets use two columns
-and then one. Chart frames have stable heights; the container table has its own
-horizontal overflow and a six-item page. Loading and connectivity notices have
+and then one; detail cards and volume cards follow the same two-to-one collapse.
+Chart frames have stable heights; the container table has its own
+horizontal overflow and a six-item page on the overview (twelve on the detail
+view). Loading and connectivity notices have
 reserved geometry. Device identification and uptime stay visible on narrow screens.
 
 ## Elevation & Depth
@@ -134,8 +139,13 @@ has no destructive controls.
 
 ### Navigation and data display
 
-Navigation anchors scroll to enabled widgets. Time ranges are pressed-state button
-groups. The container state filter and page controls preserve semantic HTML.
+Navigation switches views: the overview keeps compact summaries while each
+category's detail view adds deeper telemetry from the same snapshot; detail
+views mount lazily on first navigation so charts size against a visible
+container. Disabled modules hide their route and fall back to the overview.
+Time ranges are pressed-state button
+groups. The container state filter, sortable detail headers, and page controls
+preserve semantic HTML.
 Charts provide textual current values; history represents actual in-page samples.
 
 ### Forms and overlays

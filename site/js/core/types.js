@@ -72,6 +72,16 @@
  * @property {number|null} tx
  * @property {number|null} speed
  * @property {boolean|null} isUp
+ * @property {number|null} rxTotal Cumulative received bytes reported by the API.
+ * @property {number|null} txTotal Cumulative sent bytes reported by the API.
+ */
+
+/**
+ * One temperature reading from the sensors plugin.
+ *
+ * @typedef {object} TemperatureSensor
+ * @property {string} label
+ * @property {number} value
  */
 
 /**
@@ -101,9 +111,11 @@
  * @property {number|null} memory
  * @property {number|null} memoryUsed
  * @property {number|null} memoryTotal
+ * @property {number|null} memoryFree
  * @property {(number|null)[]} load
  * @property {number|null} temperature
  * @property {string} temperatureLabel
+ * @property {TemperatureSensor[]} sensors All temperature readings, hottest first.
  * @property {Volume[]} volumes
  * @property {NetworkInterface[]} interfaces
  * @property {number|null} rx
@@ -142,6 +154,22 @@
  * @property {string} title
  * @property {string} icon
  * @property {Plugin[]} plugins
+ * @property {(element: HTMLElement) => {
+ *   update: (context: WidgetContext) => void,
+ *   destroy: () => void,
+ * }} mount
+ */
+
+/**
+ * Detail view registry entry. Views mount lazily into their own hash-routed
+ * section (`view-${id}`) on first navigation and share the polling context
+ * with overview widgets, so they never request extra plugins.
+ *
+ * @typedef {object} ViewDefinition
+ * @property {string} id Hash route segment; matches the WidgetId it expands.
+ * @property {string} eyebrow Label above the shared page title.
+ * @property {string} title Page title in the shared heading and breadcrumb.
+ * @property {string} description Sentence below the page title.
  * @property {(element: HTMLElement) => {
  *   update: (context: WidgetContext) => void,
  *   destroy: () => void,

@@ -60,7 +60,7 @@ test("first visit collects an address, tests it, and persists settings", async (
   );
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(page.locator("#connection-text")).toHaveText("已连接");
-  await expect(page.locator("#storage")).toContainText("/volume1");
+  await expect(page.locator("#widget-storage")).toContainText("/volume1");
   await page.reload();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await expect(page.locator("#connection-text")).toHaveText("已连接");
@@ -141,7 +141,9 @@ test("missing sensors and containers do not block other metrics", async ({
   await expect(page.locator("#connection-text")).toHaveText("部分数据不可用");
   await expect(page.locator("#cpu-value")).not.toHaveText("--");
   await expect(page.locator("#temperature-value")).toHaveText("--");
-  await expect(page.locator("#containers")).toContainText("暂无容器数据");
+  await expect(page.locator("#widget-containers")).toContainText(
+    "暂无容器数据",
+  );
 });
 
 test("module settings and filters work with keyboard and reduced motion", async ({
@@ -149,14 +151,18 @@ test("module settings and filters work with keyboard and reduced motion", async 
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?demo=1");
-  await expect(page.locator("#containers")).toContainText("backup-worker");
+  await expect(page.locator("#widget-containers")).toContainText(
+    "backup-worker",
+  );
   await page.getByLabel("筛选容器状态").selectOption("stopped");
-  await expect(page.locator("#containers tbody tr")).toHaveCount(1);
-  await expect(page.locator("#containers")).toContainText("backup-worker");
+  await expect(page.locator("#widget-containers tbody tr")).toHaveCount(1);
+  await expect(page.locator("#widget-containers")).toContainText(
+    "backup-worker",
+  );
   await page.getByRole("button", { name: "管理监控模块" }).click();
   await page.getByRole("checkbox", { name: "容器服务" }).uncheck();
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
-  await expect(page.locator("#containers")).toHaveCount(0);
+  await expect(page.locator("#widget-containers")).toHaveCount(0);
   const trigger = page.getByRole("button", { name: "管理监控模块" });
   await trigger.focus();
   await page.keyboard.press("Enter");
@@ -180,4 +186,52 @@ test("monitoring and connection dialog pass automated accessibility checks", asy
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
   expect(dialogResult.violations).toEqual([]);
+});
+
+test("detail views reveal deeper telemetry than the overview", async ({
+  page,
+}) => {
+  await page.goto("/?demo=1");
+  await expect(page.locator("#cpu-value")).not.toHaveText("--");
+
+  // System resources: breakdown, sensor list, and dedicated charts.
+  await page.getByRole("link", { name: "系统资源" }).click();
+  await expect(page).toHaveURL(/#resources$/);
+  await expect(page.locator("#overview")).toBeHidden();
+  await expect(page.locator("#view-resources")).toBeVisible();
+  await expect(page.locator("#view-resources")).toContainText("用户态");
+  await expect(page.locator("#view-resources")).toContainText("M.2 SSD");
+  await expect(page.locator("#view-resources canvas")).toHaveCount(2);
+
+  // Storage: aggregate summary and per-volume device details.
+  await page.getByRole("link", { name: "存储空间" }).click();
+  await expect(page.locator("#view-storage")).toBeVisible();
+  await expect(page.locator("#view-storage")).toContainText("总容量");
+  await expect(page.locator("#view-storage")).toContainText("cachedev_0");
+
+  // Network: per-interface table with counters absent from the overview.
+  await page.getByRole("link", { name: "网络流量" }).click();
+  await expect(page.locator("#view-network")).toBeVisible();
+  await expect(page.locator("#view-network")).toContainText("累计接收");
+  await expect(page.locator("#view-network")).toContainText("eth1");
+  await expect(page.locator("#view-network")).toContainText("1.0 Gbit/s");
+
+  // Containers: summary chips plus sorting on the detail table.
+  await page.getByRole("link", { name: "容器服务" }).click();
+  await expect(page.locator("#view-containers")).toBeVisible();
+  await expect(page.locator("#view-containers")).toContainText("CPU 合计");
+  await page.getByRole("button", { name: "CPU", exact: true }).first().click();
+  await expect(page.locator("#view-containers tbody tr").first()).toContainText(
+    "jellyfin",
+  );
+  const detailResult = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(detailResult.violations).toEqual([]);
+
+  // The overview stays intact and remains reachable through the hash route.
+  await page.getByRole("link", { name: "运行概览" }).click();
+  await expect(page.locator("#overview")).toBeVisible();
+  await expect(page.locator("#view-containers")).toBeHidden();
+  await expect(page.locator("#widget-grid")).toBeVisible();
 });

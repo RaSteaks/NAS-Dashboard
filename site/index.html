@@ -57,7 +57,8 @@
           <div class="breadcrumb">
             <i data-lucide="server"></i
             ><span id="breadcrumb-name">我的 NAS</span
-            ><span class="breadcrumb-divider">/</span><span>运行概览</span>
+            ><span class="breadcrumb-divider">/</span
+            ><span id="breadcrumb-view">运行概览</span>
           </div>
           <div class="topbar-actions">
             <span id="source-badge" class="source-badge">未连接</span>
@@ -72,45 +73,59 @@
             </button>
           </div>
         </header>
+        <nav class="mobile-nav" aria-label="移动导航">
+          <a href="#overview" class="active" aria-current="page"
+            ><i data-lucide="layout-dashboard"></i>运行概览</a
+          >
+          <a href="#resources"><i data-lucide="activity"></i>系统资源</a>
+          <a href="#storage"><i data-lucide="hard-drive"></i>存储空间</a>
+          <a href="#network"><i data-lucide="network"></i>网络流量</a>
+          <a href="#containers"><i data-lucide="boxes"></i>容器服务</a>
+        </nav>
         <main id="main" tabindex="-1">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow" id="page-eyebrow">NAS MONITOR</div>
+              <h1 id="page-title">
+                <span id="page-title-text">运行概览</span
+                ><span class="heading-dot">.</span>
+              </h1>
+              <p class="page-description" id="page-description">
+                设备的每一刻，尽在掌握。
+              </p>
+            </div>
+            <div class="page-actions">
+              <span class="refresh-label" id="refresh-label">每 5 秒更新</span>
+              <button
+                id="pause-button"
+                class="icon-button"
+                type="button"
+                aria-label="暂停自动更新"
+                title="暂停自动更新"
+                aria-pressed="false"
+              >
+                <i data-lucide="pause"></i>
+              </button>
+              <button
+                id="refresh-button"
+                class="button button-outline"
+                type="button"
+              >
+                <i data-lucide="refresh-cw"></i><span>刷新</span>
+              </button>
+            </div>
+          </div>
+          <div class="notice-slot">
+            <div id="notice" class="notice" hidden role="status">
+              <i data-lucide="info"></i><span id="notice-text"></span
+              ><button id="notice-action" type="button">连接设置</button>
+            </div>
+          </div>
           <section
             id="overview"
-            class="overview-section"
-            aria-labelledby="overview-title"
+            class="view view-overview"
+            data-view="overview"
           >
-            <div class="page-heading">
-              <div>
-                <div class="eyebrow">NAS MONITOR</div>
-                <h1 id="overview-title">
-                  运行概览<span class="heading-dot">.</span>
-                </h1>
-                <p class="page-description" id="page-description">
-                  设备的每一刻，尽在掌握。
-                </p>
-              </div>
-              <div class="page-actions">
-                <span class="refresh-label" id="refresh-label"
-                  >每 5 秒更新</span
-                >
-                <button
-                  id="pause-button"
-                  class="icon-button"
-                  type="button"
-                  aria-label="暂停自动更新"
-                  title="暂停自动更新"
-                  aria-pressed="false"
-                >
-                  <i data-lucide="pause"></i>
-                </button>
-                <button
-                  id="refresh-button"
-                  class="button button-outline"
-                  type="button"
-                >
-                  <i data-lucide="refresh-cw"></i><span>刷新</span>
-                </button>
-              </div>
-            </div>
             <div class="device-strip">
               <div class="device-strip-main">
                 <span class="strip-icon"><i data-lucide="server"></i></span>
@@ -128,12 +143,6 @@
                   ><i data-lucide="clock-3"></i><span>已运行</span
                   ><strong id="uptime-value">--</strong></span
                 >
-              </div>
-            </div>
-            <div class="notice-slot">
-              <div id="notice" class="notice" hidden role="status">
-                <i data-lucide="info"></i><span id="notice-text"></span
-                ><button id="notice-action" type="button">连接设置</button>
               </div>
             </div>
             <div class="metrics-grid">
@@ -215,34 +224,58 @@
                 </div>
               </article>
             </div>
-          </section>
-          <div class="section-toolbar">
-            <h2>实时监控</h2>
-            <div class="history-toolbar">
-              <span class="history-label">趋势窗口</span>
-              <div
-                class="segmented-control"
-                role="group"
-                aria-label="趋势时间范围"
-              >
-                <button type="button" data-window="5" aria-pressed="false">
-                  5 分钟</button
-                ><button type="button" data-window="15" aria-pressed="true">
-                  15 分钟
+            <div class="section-toolbar">
+              <h2>实时监控</h2>
+              <div class="history-toolbar">
+                <span class="history-label">趋势窗口</span>
+                <div
+                  class="segmented-control"
+                  role="group"
+                  aria-label="趋势时间范围"
+                >
+                  <button type="button" data-window="5" aria-pressed="false">
+                    5 分钟</button
+                  ><button type="button" data-window="15" aria-pressed="true">
+                    15 分钟
+                  </button>
+                </div>
+                <button
+                  id="widgets-button"
+                  type="button"
+                  class="icon-button"
+                  aria-label="管理监控模块"
+                  title="管理监控模块"
+                >
+                  <i data-lucide="sliders-horizontal"></i>
                 </button>
               </div>
-              <button
-                id="widgets-button"
-                type="button"
-                class="icon-button"
-                aria-label="管理监控模块"
-                title="管理监控模块"
-              >
-                <i data-lucide="sliders-horizontal"></i>
-              </button>
             </div>
-          </div>
-          <div id="widget-grid" class="widget-grid"></div>
+            <div id="widget-grid" class="widget-grid"></div>
+          </section>
+          <section
+            id="view-resources"
+            class="view view-detail"
+            data-view="resources"
+            hidden
+          ></section>
+          <section
+            id="view-storage"
+            class="view view-detail"
+            data-view="storage"
+            hidden
+          ></section>
+          <section
+            id="view-network"
+            class="view view-detail"
+            data-view="network"
+            hidden
+          ></section>
+          <section
+            id="view-containers"
+            class="view view-detail"
+            data-view="containers"
+            hidden
+          ></section>
           <footer class="page-footer">
             <span
               ><span class="footer-dot" aria-hidden="true"></span
