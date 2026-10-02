@@ -56,6 +56,19 @@ if (!$url || !isset($url['host'], $url['scheme']) || !in_array($url['scheme'], [
     respond(503, ['error' => 'Configure the Glances API URL on the server.']);
 }
 
+// NAS proxy environment variables can route local API requests through a proxy returning 503.
+// Public addresses and other hostnames retain the administrator's environment proxy settings.
+$upstreamHost = trim($url['host'], '[]');
+$bypassEnvironmentProxy = strcasecmp($upstreamHost, 'localhost') === 0
+    || (
+        filter_var($upstreamHost, FILTER_VALIDATE_IP) !== false
+        && filter_var(
+            $upstreamHost,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        ) === false
+    );
+
 $multi = curl_multi_init();
 $handles = [];
 $bodies = [];
@@ -84,6 +97,10 @@ foreach ($plugins as $plugin) {
             return strlen($chunk);
         },
     ]);
+    if ($bypassEnvironmentProxy) {
+        // Match only the configured upstream; bracket-free IPv6 also works on older libcurl.
+        curl_setopt($handle, CURLOPT_NOPROXY, $upstreamHost);
+    }
     if (!empty($config['username']) && isset($config['password'])) {
         curl_setopt($handle, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
         curl_setopt($handle, CURLOPT_USERPWD, $config['username'] . ':' . $config['password']);
