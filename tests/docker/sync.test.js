@@ -121,6 +121,11 @@ test(
           readFileSync(join(data, "site/index.html"), "utf8"),
           content,
         );
+        // The publisher stamps the site with the synced commit for the badge.
+        assert.equal(
+          readFileSync(join(data, "site/build.json"), "utf8"),
+          `{"commit":"${hash}"}\n`,
+        );
         const published = lstatSync(join(data, "site"));
         assert.ok(published.isDirectory());
         assert.equal(published.isSymbolicLink(), false);

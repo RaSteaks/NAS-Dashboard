@@ -10,7 +10,8 @@ fi
 
 # Never copy an old checkout after a failed sync.
 /git-sync "$@"
-source="${GITSYNC_LINK:-/data/current}/site"
+repo="${GITSYNC_LINK:-/data/current}"
+source="$repo/site"
 destination=/data/site
 if [ ! -f "$source/index.html" ]; then
   echo "publish: synced repository has no site/index.html" >&2
@@ -37,6 +38,11 @@ trap 'exit 143' TERM
 # Stage every file first; mktemp creates mode 700, which must be readable by HTTP.
 cp -R "$source/." "$stage/"
 chmod 755 "$stage"
+# The footer build badge reads this stamp. Git-sync targets its checkout
+# symlink at the synced commit; an unreadable link leaves an empty stamp
+# that the page simply hides.
+link=$(readlink "$repo" 2>/dev/null || true)
+printf '{"commit":"%s"}\n' "${link##*/}" > "$stage/build.json"
 if [ -d "$destination" ]; then
   backup=$(mktemp -d /data/.site-old.XXXXXX)
   mv "$destination" "$backup/site"

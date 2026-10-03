@@ -139,6 +139,34 @@ test("display preferences re-scale paused readings in place", async ({
   );
 });
 
+test("footer shows the deployed commit when the publisher provides one", async ({
+  page,
+}) => {
+  await page.goto("/?demo=1");
+  await expect(page.locator("#cpu-value")).not.toHaveText("--");
+  // The dev server publishes no build.json; the badge must stay hidden.
+  await expect(page.locator("#build-id")).toBeHidden();
+
+  await page.route(
+    "**/build.json",
+    /** @param {import("@playwright/test").Route} route */ (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          commit: "ea661300028bf193e86ecd4d59f008393822268c",
+        }),
+      }),
+  );
+  await page.reload();
+  await expect(page.locator("#build-id")).toBeVisible();
+  await expect(page.locator("#build-id")).toHaveText("构建 ea66130");
+  await expect(page.locator("#build-id")).toHaveAttribute(
+    "title",
+    "构建 ea661300028bf193e86ecd4d59f008393822268c",
+  );
+});
+
 test("network failure keeps prior readings and never switches to demo", async ({
   page,
 }) => {

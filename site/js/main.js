@@ -460,6 +460,26 @@ function repaint() {
   renderAll();
 }
 
+// The publisher stamps site/build.json with the synced commit; manual
+// deployments and the dev server lack the file and the badge stays hidden.
+async function loadBuild() {
+  try {
+    const response = await fetch(new URL("./build.json", location.href), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) return;
+    const build = /** @type {{commit?: unknown}} */ (await response.json());
+    if (typeof build?.commit !== "string" || !build.commit) return;
+    const badge = $("build-id", HTMLElement);
+    badge.textContent = `构建 ${build.commit.slice(0, 7)}`;
+    badge.title = `构建 ${build.commit}`;
+    badge.hidden = false;
+  } catch {
+    // No stamp available; the footer stays clean instead of surfacing an error.
+  }
+}
+
 function clearTest() {
   testController?.abort();
   testController = undefined;
@@ -749,6 +769,7 @@ async function init() {
     configError = requestError(error);
   }
   connect();
+  void loadBuild();
   if (!demo && !config.api.url) openSettings(true);
 }
 

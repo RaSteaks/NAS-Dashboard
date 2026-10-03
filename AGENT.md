@@ -33,7 +33,9 @@ on first visit; no private NAS address or credentials ship as defaults.
   by default. Do not place private config in managed site/, .sync/, or current/.
   Build with `docker build -t nas-dashboard:1.0.1 docker`. The image only downloads
   website code when run. Publishing requires user authorization. Never overwrite
-  released 1.0.0; it retains the old symlink-only behavior.
+  released 1.0.0; it retains the old symlink-only behavior. The publish wrapper
+  also stamps `site/build.json` with the synced commit; the page footer shows it
+  as the build badge and hides itself when the stamp is absent.
 - Demo data is explicitly enabled through settings or `?demo=1`; failures never
   substitute simulated values for live telemetry.
 

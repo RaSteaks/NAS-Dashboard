@@ -1492,6 +1492,9 @@ th[aria-sort="descending"] .sort-button::after {
   border-radius: 50%;
   background: var(--color-muted);
 }
+.build-id {
+  font-variant-numeric: tabular-nums;
+}
 .settings-dialog {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
@@ -1972,6 +1975,7 @@ input[type="checkbox"] {
   }
   .page-footer {
     font-size: 8px;
+    flex-wrap: wrap;
   }
   .notice-slot {
     min-height: 36px;
