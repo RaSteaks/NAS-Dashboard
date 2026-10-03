@@ -17,7 +17,7 @@ import {
 } from "./core/config.js";
 import { fetchSnapshot, requestError } from "./core/api.js";
 import { demoHistory, demoSnapshot } from "./core/demo.js";
-import { bytes, decimal, time, uptime } from "./core/format.js";
+import { bytes, decimal, setByteUnits, time, uptime } from "./core/format.js";
 import { normalize } from "./core/metrics.js";
 import { Poller } from "./core/poller.js";
 import { $, el, icon, icons, setText } from "./ui/dom.js";
@@ -272,7 +272,11 @@ function showView(id, scroll = true) {
   if (id !== "overview" && !viewInstances.has(id)) {
     const definition = detailViews.find((view) => view.id === id);
     const host = document.getElementById(`view-${id}`);
-    if (definition && host) viewInstances.set(id, definition.mount(host));
+    if (definition && host) {
+      // Reconnects destroy instances but not their DOM; drop stale copies.
+      host.replaceChildren();
+      viewInstances.set(id, definition.mount(host));
+    }
     syncWindowButtons();
   }
   const meta = viewMeta(id);
@@ -386,6 +390,8 @@ function receive(next) {
 
 // Explicit connections reset samples so data from different sources cannot mix.
 function connect() {
+  // Formatting reads this module state; apply it before anything re-renders.
+  setByteUnits(config.unit, config.unitBase);
   poller?.stop();
   $("refresh-button", HTMLButtonElement).disabled = false;
   $("refresh-button", HTMLElement).classList.remove("is-busy");
@@ -468,6 +474,8 @@ function openSettings(firstRun = false) {
       : undefined;
   $("setting-name", HTMLInputElement).value = config.name;
   $("setting-mode", HTMLSelectElement).value = config.api.mode;
+  $("setting-unit", HTMLSelectElement).value = config.unit;
+  $("setting-base", HTMLSelectElement).value = String(config.unitBase);
   const interval = $("setting-interval", HTMLSelectElement);
   if (
     !Array.from(interval.options).some(
@@ -524,6 +532,13 @@ function draft() {
       url: normalizeApiAddress($("setting-url", HTMLInputElement).value),
     },
     refreshSeconds: Number($("setting-interval", HTMLSelectElement).value),
+    unit: /** @type {Config["unit"]} */ (
+      $("setting-unit", HTMLSelectElement).value
+    ),
+    unitBase:
+      Number($("setting-base", HTMLSelectElement).value) === 1000
+        ? /** @type {1000} */ (1000)
+        : /** @type {1024} */ (1024),
     widgets: /** @type {WidgetId[]} */ (
       Array.from(
         /** @type {NodeListOf<HTMLInputElement>} */ (

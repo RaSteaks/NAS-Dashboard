@@ -272,6 +272,7 @@ Glances 端口避免直接暴露公网，使用 VPN 或认证入口。面板展�
 | `networkInterfaces`                 | `[]`，自动筛选；填写接口名可显式指定            |
 | `networkIgnorePattern`              | 忽略回环和常见虚拟接口，具体正则见配置文件      |
 | `widgets`                           | `resources`、`storage`、`network`、`containers` |
+| `unit` / `unitBase`                 | `auto` / `1024`，字节显示单位与换算进制         |
 | `thresholds`                        | CPU、内存、存储为 `85`，温度为 `70`             |
 
 ## 开发与验证

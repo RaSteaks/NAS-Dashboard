@@ -1,5 +1,43 @@
 // @ts-check
 
+/** @typedef {import("./types.js").ByteUnit} ByteUnit */
+
+const UNIT_KEYS = ["B", "KB", "MB", "GB", "TB"];
+const BINARY_UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+const DECIMAL_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
+
+// Display preference for every byte quantity; applied before the first render.
+/** @type {{unit: ByteUnit, base: 1000|1024}} */
+let bytePreference = { unit: "auto", base: 1024 };
+
+/**
+ * @param {ByteUnit} unit "auto" scales each value; a fixed unit pins every reading.
+ * @param {1000|1024} base Decimal (KB/MB/GB) or binary (KiB/MiB/GiB) steps.
+ */
+export function setByteUnits(unit, base) {
+  bytePreference = { unit, base };
+}
+
+/**
+ * The unit network charts plot in: the fixed preference, or the second step
+ * (MiB/MB) when values scale automatically.
+ *
+ * @returns {{divisor: number, unit: string}}
+ */
+export function chartByteScale() {
+  const { unit, base } = bytePreference;
+  const exponent = unit === "auto" ? 2 : Math.max(0, UNIT_KEYS.indexOf(unit));
+  return { divisor: base ** exponent, unit: unitLabels(base)[exponent] };
+}
+
+/**
+ * @param {1000|1024} base
+ * @returns {string[]}
+ */
+function unitLabels(base) {
+  return base === 1000 ? DECIMAL_UNITS : BINARY_UNITS;
+}
+
 /**
  * @param {number|null} value
  * @param {number} [digits=1]
@@ -20,14 +58,19 @@ export function decimal(value, digits = 1) {
  * @returns {string}
  */
 export function bytes(value, rate = false) {
-  // Capacity and throughput consistently use binary units rather than decimal GB.
   if (value === null) return "--";
-  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  const { unit, base } = bytePreference;
+  const units = unitLabels(base);
   const exponent =
-    value > 0
-      ? Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)))
-      : 0;
-  return `${decimal(value / 1024 ** exponent, exponent > 0 ? 1 : 0)} ${units[exponent]}${rate ? "/s" : ""}`;
+    unit === "auto"
+      ? value > 0
+        ? Math.min(
+            units.length - 1,
+            Math.floor(Math.log(value) / Math.log(base)),
+          )
+        : 0
+      : Math.max(0, UNIT_KEYS.indexOf(unit));
+  return `${decimal(value / base ** exponent, exponent > 0 ? 1 : 0)} ${units[exponent]}${rate ? "/s" : ""}`;
 }
 
 /**

@@ -20,6 +20,13 @@
 /** @typedef {"resources"|"storage"|"network"|"containers"} WidgetId */
 
 /**
+ * Byte display unit: "auto" scales each value to a readable step, the others
+ * pin every reading to one unit.
+ *
+ * @typedef {"auto"|"B"|"KB"|"MB"|"GB"|"TB"} ByteUnit
+ */
+
+/**
  * @typedef {object} Thresholds
  * @property {number} cpu
  * @property {number} memory
@@ -41,6 +48,8 @@
  * @property {string[]} networkInterfaces
  * @property {string} networkIgnorePattern
  * @property {WidgetId[]} widgets
+ * @property {ByteUnit} unit Byte unit every reading renders in ("auto" scales).
+ * @property {1000|1024} unitBase Decimal or binary steps between units.
  * @property {Thresholds} thresholds
  */
 

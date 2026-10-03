@@ -4,7 +4,7 @@
 /** @typedef {import("../core/types.js").NetworkInterface} NetworkInterface */
 /** @typedef {import("../core/types.js").ViewDefinition} ViewDefinition */
 /** @typedef {import("../core/types.js").WidgetContext} WidgetContext */
-import { bitrate, bytes } from "../core/format.js";
+import { bitrate, bytes, chartByteScale } from "../core/format.js";
 import {
   el,
   icon,
@@ -61,7 +61,7 @@ export const networkView = {
     const tx = el("strong");
     const canvas = el("canvas", {
       role: "img",
-      "aria-label": "所选接口的接收与发送速率趋势，单位 MiB 每秒。",
+      "aria-label": `所选接口的接收与发送速率趋势，单位 ${chartByteScale().unit} 每秒。`,
     });
     const empty = el("div", { class: "chart-empty" }, "等待采集网络数据");
     const chartPanel = el(
@@ -88,7 +88,8 @@ export const networkView = {
       el(
         "div",
         { class: "panel-footnote" },
-        "速率单位为 MiB/s；累计流量为 Glances 提供的接口计数器。",
+        // Views remount on reconnect, after the unit preference applies.
+        `速率单位为 ${chartByteScale().unit}/s；累计流量为 Glances 提供的接口计数器。`,
       ),
     );
     const tableStatus = el(

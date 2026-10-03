@@ -1,7 +1,7 @@
 // @ts-check
 
 /** @typedef {import("../core/types.js").HistoryPoint} HistoryPoint */
-import { time } from "../core/format.js";
+import { chartByteScale, time } from "../core/format.js";
 
 // UMD registers its controllers and plugins; keep Node-only imports safe.
 const Chart = /** @type {any} */ (typeof window === "undefined" ? {} : window)
@@ -60,7 +60,7 @@ export function lineChart(canvas, series, percent = false) {
             title: (/** @type {any[]} */ items) =>
               items.length ? time(items[0].parsed.x ?? Date.now()) : "",
             label: (/** @type {any} */ item) =>
-              `${item.dataset.label}: ${item.parsed.y?.toFixed(1) ?? "--"}${percent ? "%" : " MiB/s"}`,
+              `${item.dataset.label}: ${item.parsed.y?.toFixed(1) ?? "--"}${percent ? "%" : ` ${chartByteScale().unit}/s`}`,
           },
         },
       },
@@ -98,6 +98,8 @@ export function lineChart(canvas, series, percent = false) {
     update(history, windowMinutes) {
       const end = history.at(-1)?.timestamp ?? Date.now();
       const start = end - windowMinutes * 60000;
+      // Re-read per update so a saved unit preference re-scales live charts.
+      const divisor = percent ? 1 : chartByteScale().divisor;
       chart.options.scales.x.min = start;
       chart.options.scales.x.max = end;
       chart.data.datasets.forEach(
@@ -108,7 +110,7 @@ export function lineChart(canvas, series, percent = false) {
               const value = point[series[index].key];
               return {
                 x: point.timestamp,
-                y: value === null ? null : value / (percent ? 1 : 1024 ** 2),
+                y: value === null ? null : value / divisor,
               };
             });
           // Show the first real sample before enough points exist to draw a trace.

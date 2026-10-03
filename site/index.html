@@ -338,6 +338,26 @@
               </select>
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label for="setting-unit">数据单位</label
+              ><select id="setting-unit">
+                <option value="auto">自动换算</option>
+                <option value="B">B（字节）</option>
+                <option value="KB">KB</option>
+                <option value="MB">MB</option>
+                <option value="GB">GB</option>
+                <option value="TB">TB</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="setting-base">换算进制</label
+              ><select id="setting-base">
+                <option value="1024">1024（KiB / MiB / GiB）</option>
+                <option value="1000">1000（KB / MB / GB）</option>
+              </select>
+            </div>
+          </div>
           <div class="form-field">
             <label id="api-field-label" for="setting-url"
               >Glances API 地址</label

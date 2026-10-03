@@ -3,7 +3,7 @@
 /** @typedef {import("../core/types.js").HistoryPoint} HistoryPoint */
 /** @typedef {import("../core/types.js").WidgetContext} WidgetContext */
 /** @typedef {import("../core/types.js").WidgetDefinition} WidgetDefinition */
-import { bytes } from "../core/format.js";
+import { bytes, chartByteScale } from "../core/format.js";
 import {
   el,
   icon,
@@ -30,7 +30,8 @@ export const networkWidget = {
     const tx = el("strong");
     const canvas = el("canvas", {
       role: "img",
-      "aria-label": "网络接收与发送速率趋势，单位 MiB 每秒。",
+      // Mounted after the unit preference applies, so the label names the step.
+      "aria-label": `网络接收与发送速率趋势，单位 ${chartByteScale().unit} 每秒。`,
     });
     const empty = el("div", { class: "chart-empty" }, "等待采集网络数据");
     const footnote = el("div", { class: "panel-footnote" });
@@ -99,7 +100,7 @@ export const networkWidget = {
       );
       footnote.textContent = selected
         ? `${selected.name} · ${selected.isUp === null ? "链路状态未提供" : selected.isUp ? "链路已连接" : "链路未连接"}`
-        : `监测 ${metrics.interfaces.length} 个接口 · MiB/s`;
+        : `监测 ${metrics.interfaces.length} 个接口 · ${chartByteScale().unit}/s`;
       if (lastSelection !== select.value) {
         selectedHistory = [];
         lastSelection = select.value;

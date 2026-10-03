@@ -16,12 +16,16 @@ export const defaults = {
   networkInterfaces: [],
   networkIgnorePattern: "^(lo$|docker|veth|br-|virbr|tun|tap)",
   widgets: ["resources", "storage", "network", "containers"],
+  unit: "auto",
+  unitBase: 1024,
   thresholds: { cpu: 85, memory: 85, storage: 85, temperature: 70 },
 };
 
 export const storageKey = "nas-dashboard.settings.v1";
 /** @type {WidgetId[]} */
 const widgetIds = ["resources", "storage", "network", "containers"];
+/** @type {Config["unit"][]} */
+const byteUnits = ["auto", "B", "KB", "MB", "GB", "TB"];
 
 /**
  * @param {string} value
@@ -103,6 +107,13 @@ export function mergeConfig(input, base = defaults) {
     );
   if (Array.isArray(value.widgets))
     config.widgets = widgetIds.filter((id) => value.widgets?.includes(id));
+  if (
+    typeof value.unit === "string" &&
+    byteUnits.includes(/** @type {Config["unit"]} */ (value.unit))
+  )
+    config.unit = /** @type {Config["unit"]} */ (value.unit);
+  if (value.unitBase === 1000 || value.unitBase === 1024)
+    config.unitBase = value.unitBase;
   if (value.thresholds) {
     for (const field of /** @type {["cpu","memory","storage","temperature"]} */ ([
       "cpu",
@@ -159,6 +170,8 @@ export function saveSettings(config) {
         api: config.api,
         refreshSeconds: config.refreshSeconds,
         widgets: config.widgets,
+        unit: config.unit,
+        unitBase: config.unitBase,
       }),
     );
     return true;

@@ -8,7 +8,12 @@ import {
   validateApi,
 } from "../site/js/core/config.js";
 import { fetchSnapshot } from "../site/js/core/api.js";
-import { bitrate } from "../site/js/core/format.js";
+import {
+  bitrate,
+  bytes,
+  chartByteScale,
+  setByteUnits,
+} from "../site/js/core/format.js";
 import { normalize } from "../site/js/core/metrics.js";
 import { Poller } from "../site/js/core/poller.js";
 import { requiredPlugins } from "../site/js/widgets/index.js";
@@ -29,6 +34,8 @@ const snapshot = (data) => ({
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  // Formatting reads a module-level preference; reset it for other suites.
+  setByteUnits("auto", 1024);
 });
 
 describe("Glances normalization", () => {
@@ -202,6 +209,32 @@ describe("detail formatting", () => {
     expect(bitrate(125 * 1e6)).toBe("125.0 Mbit/s");
     expect(bitrate(null)).toBe("--");
   });
+  it("auto-scales binary units and rate suffixes by default", () => {
+    expect(bytes(1024 ** 3)).toBe("1.0 GiB");
+    expect(bytes(4096, true)).toBe("4.0 KiB/s");
+    expect(bytes(512)).toBe("512 B");
+    expect(bytes(null, true)).toBe("--");
+  });
+  it("pins every reading to the chosen unit", () => {
+    setByteUnits("GB", 1000);
+    expect(bytes(2.5 * 1000 ** 3)).toBe("2.5 GB");
+    // A pinned unit converts sub-step values instead of re-scaling them.
+    expect(bytes(900 * 1000 ** 2, true)).toBe("0.9 GB/s");
+    setByteUnits("MB", 1024);
+    expect(bytes(2 * 1024 ** 3)).toBe("2,048.0 MiB");
+  });
+  it("auto-scales decimal units when the base is 1000", () => {
+    setByteUnits("auto", 1000);
+    expect(bytes(1000 ** 4)).toBe("1.0 TB");
+    expect(bytes(1500)).toBe("1.5 KB");
+  });
+  it("scales network charts to the plotted unit", () => {
+    expect(chartByteScale()).toEqual({ divisor: 1024 ** 2, unit: "MiB" });
+    setByteUnits("GB", 1000);
+    expect(chartByteScale()).toEqual({ divisor: 1000 ** 3, unit: "GB" });
+    setByteUnits("auto", 1000);
+    expect(chartByteScale()).toEqual({ divisor: 1000 ** 2, unit: "MB" });
+  });
 });
 
 describe("configuration", () => {
@@ -242,6 +275,14 @@ describe("configuration", () => {
     expect(result.volumePattern).toBe(defaults.volumePattern);
     expect(result.refreshSeconds).toBe(3);
     expect(result.widgets).toEqual(["network"]);
+  });
+  it("accepts a display unit preference and rejects unknown values", () => {
+    const result = mergeConfig({ unit: "MB", unitBase: 1000 });
+    expect(result.unit).toBe("MB");
+    expect(result.unitBase).toBe(1000);
+    const invalid = mergeConfig({ unit: "quanta", unitBase: 10 });
+    expect(invalid.unit).toBe(defaults.unit);
+    expect(invalid.unitBase).toBe(defaults.unitBase);
   });
   it("stops requesting disabled optional modules", () => {
     expect(requiredPlugins([])).not.toContain("containers");

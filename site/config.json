@@ -12,6 +12,8 @@
   "networkInterfaces": [],
   "networkIgnorePattern": "^(lo$|docker|veth|br-|virbr|tun|tap)",
   "widgets": ["resources", "storage", "network", "containers"],
+  "unit": "auto",
+  "unitBase": 1024,
   "thresholds": {
     "cpu": 85,
     "memory": 85,

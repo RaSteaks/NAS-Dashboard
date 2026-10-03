@@ -177,10 +177,12 @@ motion disables spinner animation and transitions. Hidden tabs stop network poll
 
 ### Content and data visualization
 
-Plain Chinese operational copy. Bytes use binary units consistently (`MiB/s`,
-`GiB`, `TiB`). CPU and memory use percent; load is dimensionless. API success is
-distinct from hardware health, and capacity alone never implies RAID health.
-Demo data is opt-in and persistently labeled.
+Plain Chinese operational copy. Bytes default to auto-scaled binary units
+(`MiB/s`, `GiB`, `TiB`); the saved unit preference (`unit`, `unitBase`) can pin
+one unit and switch to decimal steps, and every reading — including chart axes,
+tooltips, and footnotes — follows it. CPU and memory use percent; load is
+dimensionless. API success is distinct from hardware health, and capacity alone
+never implies RAID health. Demo data is opt-in and persistently labeled.
 
 ## Do's and Don'ts
 
