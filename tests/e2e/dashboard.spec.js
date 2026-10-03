@@ -109,6 +109,36 @@ test("demo charts render and layout fits the viewport", async ({
   await expect(page.locator("#connection-text")).toHaveText("演示已暂停");
 });
 
+test("display preferences re-scale paused readings in place", async ({
+  page,
+}) => {
+  await page.goto("/?demo=1");
+  await expect(page.locator("#memory-detail")).toContainText("GiB");
+  await page.getByRole("button", { name: "暂停自动更新" }).click();
+  await expect(page.locator("#connection-text")).toHaveText("演示已暂停");
+
+  await page.getByRole("button", { name: "管理监控模块" }).click();
+  await page.locator("#setting-unit").selectOption("GB");
+  await page.locator("#setting-base").selectOption("1000");
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+
+  // No poll will start while paused, so the saved unit must repaint the
+  // readings already on screen instead of waiting for a reconnect.
+  await expect(page.locator("#memory-detail")).toContainText("GB");
+  await expect(page.locator("#widget-storage")).toContainText("/volume1");
+  await expect(page.locator("#connection-text")).toHaveText("演示已暂停");
+
+  // The network detail view carries the unit in a footnote and an aria-label.
+  await page.getByRole("link", { name: "网络流量" }).click();
+  await expect(page.locator("#view-network .panel-footnote")).toContainText(
+    "GB/s",
+  );
+  await expect(page.locator("#view-network canvas")).toHaveAttribute(
+    "aria-label",
+    /单位 GB 每秒/,
+  );
+});
+
 test("network failure keeps prior readings and never switches to demo", async ({
   page,
 }) => {

@@ -155,7 +155,10 @@ The canonical modal is native `<dialog>` using `showModal()` for focus trapping,
 Escape, and inert background; the application restores trigger focus. Inputs have
 real labels and inline errors; forms use `novalidate`. Native `<select>` popup
 geometry and interaction are deliberately platform-owned. Settings are reversible
-browser-local preferences. API credentials are never accepted in browser fields.
+browser-local preferences. Saving a display preference or a module choice repaints
+the readings on screen in place; only a changed data source discards samples, so a
+paused dashboard never waits on a poll that will not start. API credentials are
+never accepted in browser fields.
 Persistent failures use one page notice rather than repeated toasts.
 
 ### Iconography

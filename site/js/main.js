@@ -392,10 +392,6 @@ function receive(next) {
 function connect() {
   // Formatting reads this module state; apply it before anything re-renders.
   setByteUnits(config.unit, config.unitBase);
-  poller?.stop();
-  $("refresh-button", HTMLButtonElement).disabled = false;
-  $("refresh-button", HTMLElement).classList.remove("is-busy");
-  $("refresh-button", HTMLElement).setAttribute("aria-busy", "false");
   snapshot = undefined;
   metrics = undefined;
   lastSuccess = 0;
@@ -407,13 +403,30 @@ function connect() {
   connection = config.api.url || demo ? "loading" : "idle";
   renderOverview(normalize({ data: {}, errors: {}, collectedAt: 0 }, config));
   mountWidgets();
+  renderHeader();
+  renderConnection();
+  // Revalidate the route: a just-disabled module must fall back to overview.
+  showView(currentRoute(), false);
+  startPoller();
+}
+
+/** Device labels and the document title follow the saved configuration. */
+function renderHeader() {
   setText("device-name", config.name);
   setText("breadcrumb-name", config.name);
   setText("device-subtitle", config.subtitle);
   document.title = `${config.name} · ${viewMeta(currentView).title}${demo ? " · 演示" : ""}`;
-  renderConnection();
-  // Revalidate the route: a just-disabled module must fall back to overview.
-  showView(currentRoute(), false);
+}
+
+/**
+ * (Re)build the poller from the current configuration. Samples already on
+ * screen survive this, so changing the interval does not blank a paused page.
+ */
+function startPoller() {
+  poller?.stop();
+  $("refresh-button", HTMLButtonElement).disabled = false;
+  $("refresh-button", HTMLElement).classList.remove("is-busy");
+  $("refresh-button", HTMLElement).setAttribute("aria-busy", "false");
   if (!demo && !config.api.url) return;
   const instance = new Poller({
     intervalMs: config.refreshSeconds * 1000,
@@ -436,6 +449,15 @@ function connect() {
   });
   poller = instance;
   if (!paused && !document.hidden) instance.start();
+}
+
+/** Repaint the dashboard from the snapshot already on screen. */
+function repaint() {
+  renderHeader();
+  renderConnection();
+  if (!snapshot || !metrics) return;
+  renderOverview(metrics);
+  renderAll();
 }
 
 function clearTest() {
@@ -629,6 +651,15 @@ $("settings-form", HTMLElement).addEventListener("submit", (event) => {
   const next = draft();
   const nextDemo = $("setting-demo", HTMLInputElement).checked;
   if (!nextDemo && !validateDraft(next)) return;
+  // Only a different data source invalidates the samples on screen. Display
+  // preferences and module choices repaint in place instead: reconnecting here
+  // would blank a paused page and wait for a poll that never starts.
+  const sourceChanged =
+    nextDemo !== demo ||
+    next.api.mode !== config.api.mode ||
+    next.api.url !== config.api.url;
+  const modulesChanged = next.widgets.join() !== config.widgets.join();
+  const intervalChanged = next.refreshSeconds !== config.refreshSeconds;
   config = next;
   demo = nextDemo;
   const url = new URL(location.href);
@@ -640,7 +671,20 @@ $("settings-form", HTMLElement).addEventListener("submit", (event) => {
     : "浏览器未允许保存设置，当前页面仍可使用。";
   configError = "";
   dialog.close();
-  connect();
+  if (sourceChanged) {
+    connect();
+    return;
+  }
+  setByteUnits(config.unit, config.unitBase);
+  if (modulesChanged) {
+    viewInstances.forEach((view) => view.destroy());
+    viewInstances.clear();
+    mountWidgets();
+    // Revalidate the route: a just-disabled module must fall back to overview.
+    showView(currentRoute(), false);
+  }
+  if (intervalChanged) startPoller();
+  repaint();
 });
 for (const input of /** @type {NodeListOf<HTMLInputElement>} */ (
   document.querySelectorAll("#settings-form input")

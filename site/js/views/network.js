@@ -61,9 +61,11 @@ export const networkView = {
     const tx = el("strong");
     const canvas = el("canvas", {
       role: "img",
+      // Mounted after the unit preference applies, so the label names the step.
       "aria-label": `所选接口的接收与发送速率趋势，单位 ${chartByteScale().unit} 每秒。`,
     });
     const empty = el("div", { class: "chart-empty" }, "等待采集网络数据");
+    const footnote = el("div", { class: "panel-footnote" });
     const chartPanel = el(
       "section",
       { class: "widget-panel detail-panel span" },
@@ -85,12 +87,7 @@ export const networkView = {
         ),
       ),
       el("div", { class: "chart-area detail-chart" }, canvas, empty),
-      el(
-        "div",
-        { class: "panel-footnote" },
-        // Views remount on reconnect, after the unit preference applies.
-        `速率单位为 ${chartByteScale().unit}/s；累计流量为 Glances 提供的接口计数器。`,
-      ),
+      footnote,
     );
     const tableStatus = el(
       "span",
@@ -163,6 +160,12 @@ export const networkView = {
     const update = (context) => {
       lastContext = context;
       const { metrics, snapshot, history, windowMinutes } = context;
+      // A saved unit preference repaints this view in place, without a remount.
+      canvas.setAttribute(
+        "aria-label",
+        `所选接口的接收与发送速率趋势，单位 ${chartByteScale().unit} 每秒。`,
+      );
+      footnote.textContent = `速率单位为 ${chartByteScale().unit}/s；累计流量为 Glances 提供的接口计数器。`;
       const names = ["all", ...metrics.interfaces.map((item) => item.name)];
       if (
         Array.from(select.options)

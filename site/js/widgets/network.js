@@ -33,6 +33,8 @@ export const networkWidget = {
       // Mounted after the unit preference applies, so the label names the step.
       "aria-label": `网络接收与发送速率趋势，单位 ${chartByteScale().unit} 每秒。`,
     });
+    const unitLabel = () =>
+      `网络接收与发送速率趋势，单位 ${chartByteScale().unit} 每秒。`;
     const empty = el("div", { class: "chart-empty" }, "等待采集网络数据");
     const footnote = el("div", { class: "panel-footnote" });
     element.append(
@@ -71,6 +73,8 @@ export const networkWidget = {
     const update = (context) => {
       lastContext = context;
       const { metrics, snapshot, history, windowMinutes } = context;
+      // A saved unit preference repaints this widget in place, without a remount.
+      canvas.setAttribute("aria-label", unitLabel());
       const names = ["all", ...metrics.interfaces.map((item) => item.name)];
       if (
         Array.from(select.options)
