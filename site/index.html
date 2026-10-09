@@ -8,8 +8,8 @@
     <title>NAS Dashboard · 运行概览</title>
     <!-- Bump the icon version when its artwork changes to refresh cached tabs. -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=3" />
-    <!-- Version shell assets together so cached layouts pick up the commit links. -->
-    <link rel="stylesheet" href="./styles.css?v=3" />
+    <!-- Version shell assets together so cached pages pick up navigation changes. -->
+    <link rel="stylesheet" href="./styles.css?v=4" />
   </head>
   <body>
     <a class="skip-link" href="#main">跳至监控数据</a>
@@ -43,7 +43,16 @@
           >
         </nav>
         <div class="sidebar-bottom">
-          <button id="settings-sidebar" class="nav-link" type="button">
+          <!-- One shared settings entry survives the sidebar's compact layout. -->
+          <button
+            id="settings-sidebar"
+            class="nav-link"
+            type="button"
+            aria-label="监控设置"
+            title="监控设置"
+            aria-haspopup="dialog"
+            aria-controls="settings-dialog"
+          >
             <i data-lucide="settings-2"></i>监控设置
           </button>
           <div class="sidebar-device">
@@ -76,15 +85,6 @@
           </div>
           <div class="topbar-actions">
             <span id="source-badge" class="source-badge">未连接</span>
-            <button
-              id="settings-top"
-              class="icon-button"
-              type="button"
-              aria-label="监控设置"
-              title="监控设置"
-            >
-              <i data-lucide="settings-2"></i>
-            </button>
           </div>
         </header>
         <nav class="mobile-nav" aria-label="移动导航">
@@ -132,7 +132,7 @@
           <div class="notice-slot">
             <div id="notice" class="notice" hidden role="status">
               <i data-lucide="info"></i><span id="notice-text"></span
-              ><button id="notice-action" type="button">连接设置</button>
+              ><button id="notice-action" type="button" hidden>重试</button>
             </div>
           </div>
           <section
@@ -253,15 +253,6 @@
                     15 分钟
                   </button>
                 </div>
-                <button
-                  id="widgets-button"
-                  type="button"
-                  class="icon-button"
-                  aria-label="管理监控模块"
-                  title="管理监控模块"
-                >
-                  <i data-lucide="sliders-horizontal"></i>
-                </button>
               </div>
             </div>
             <div id="widget-grid" class="widget-grid"></div>
@@ -429,6 +420,6 @@
     </dialog>
     <noscript>请启用 JavaScript 以读取 NAS 运行数据。</noscript>
     <script defer src="./vendor/chart.umd.min.js"></script>
-    <script type="module" src="./js/main.js?v=3"></script>
+    <script type="module" src="./js/main.js?v=4"></script>
   </body>
 </html>

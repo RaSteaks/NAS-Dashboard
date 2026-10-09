@@ -49,6 +49,17 @@ test("first visit collects an address, tests it, and persists settings", async (
   await expect(
     page.getByLabel("Glances API 地址", { exact: true }),
   ).toHaveValue("");
+  // Dismissing first-run setup leaves the single navigation entry available.
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(page.locator("#notice-action")).toBeHidden();
+  await expect(page.locator("#notice")).toContainText("导航栏的「监控设置」");
+  await expect(
+    page.getByRole("button", { name: "刷新", exact: true }),
+  ).toBeDisabled();
+  const settings = page.getByRole("button", { name: "监控设置", exact: true });
+  await expect(settings).toHaveCount(1);
+  await settings.click();
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(page.locator("#api-error")).toHaveText(/有效/);
   await page
@@ -117,7 +128,7 @@ test("display preferences re-scale paused readings in place", async ({
   await page.getByRole("button", { name: "暂停自动更新" }).click();
   await expect(page.locator("#connection-text")).toHaveText("演示已暂停");
 
-  await page.getByRole("button", { name: "管理监控模块" }).click();
+  await page.getByRole("button", { name: "监控设置", exact: true }).click();
   await page.locator("#setting-unit").selectOption("GB");
   await page.locator("#setting-base").selectOption("1000");
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
@@ -211,6 +222,11 @@ test("network failure keeps prior readings and never switches to demo", async ({
   await expect(page.locator("#cpu-value")).toHaveText(value ?? "");
   await expect(page.locator("#source-badge")).toHaveText("GLANCES API");
   await expect(page.locator("#notice")).toContainText("最后一次采集");
+  // The remaining contextual action retries data instead of opening settings.
+  await mockGlances(page);
+  await page.getByRole("button", { name: "重试", exact: true }).click();
+  await expect(page.locator("#connection-text")).toHaveText("已连接");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
 });
 
 test("missing sensors and containers do not block other metrics", async ({
@@ -249,17 +265,32 @@ test("module settings and filters work with keyboard and reduced motion", async 
   await expect(page.locator("#widget-containers")).toContainText(
     "backup-worker",
   );
-  await page.getByRole("button", { name: "管理监控模块" }).click();
+  await page.getByRole("button", { name: "监控设置", exact: true }).click();
   await page.getByRole("checkbox", { name: "容器服务" }).uncheck();
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(page.locator("#widget-containers")).toHaveCount(0);
-  const trigger = page.getByRole("button", { name: "管理监控模块" });
+  const trigger = page.getByRole("button", { name: "监控设置", exact: true });
+  await expect(trigger).toHaveCount(1);
   await trigger.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await expect(trigger).toBeFocused();
+
+  // An empty dashboard still recovers through navigation, without another settings button.
+  await trigger.click();
+  for (const checkbox of await page.locator("#module-options input").all())
+    await checkbox.uncheck();
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(page.locator("#widget-grid")).toContainText(
+    "导航栏的「监控设置」",
+  );
+  await expect(page.locator("#widget-grid button")).toHaveCount(0);
+  await trigger.click();
+  await page.getByRole("checkbox", { name: "系统资源" }).check();
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(page.locator("#widget-resources")).toBeVisible();
 });
 
 test("monitoring and connection dialog pass automated accessibility checks", async ({
@@ -271,7 +302,7 @@ test("monitoring and connection dialog pass automated accessibility checks", asy
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
   expect(result.violations).toEqual([]);
-  await page.getByRole("button", { name: "管理监控模块" }).click();
+  await page.getByRole("button", { name: "监控设置", exact: true }).click();
   const dialogResult = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
@@ -292,6 +323,13 @@ test("detail views reveal deeper telemetry than the overview", async ({
   await expect(page.locator("#view-resources")).toContainText("用户态");
   await expect(page.locator("#view-resources")).toContainText("M.2 SSD");
   await expect(page.locator("#view-resources canvas")).toHaveCount(2);
+  // Detail views use the same navigation settings entry as the overview.
+  const settings = page.getByRole("button", { name: "监控设置", exact: true });
+  await expect(settings).toHaveCount(1);
+  await settings.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeFocused();
 
   // Storage: aggregate summary and per-volume device details.
   await page.getByRole("link", { name: "存储空间" }).click();

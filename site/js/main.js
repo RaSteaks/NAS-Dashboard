@@ -57,14 +57,16 @@ const dialog = $("settings-dialog", HTMLDialogElement);
 
 /**
  * @param {string} message
- * @param {string} [action="连接设置"]
+ * @param {string} [action=""]
  * @param {string} [tone="info"]
  */
-function notice(message, action = "连接设置", tone = "info") {
+function notice(message, action = "", tone = "info") {
   $("notice", HTMLElement).hidden = !message;
   $("notice", HTMLElement).className = `notice ${tone}`;
   setText("notice-text", message);
   setText("notice-action", action);
+  // Notices offer data retries only; settings live in the shared navigation.
+  $("notice-action", HTMLButtonElement).hidden = !action;
 }
 
 function renderConnection() {
@@ -114,9 +116,14 @@ function renderConnection() {
           ? "Glances 已连接"
           : text,
   );
-  if (configError) notice(configError, "连接设置", "warning");
+  if (configError)
+    notice(
+      `${configError} 请在导航栏的「监控设置」中检查连接配置。`,
+      "",
+      "warning",
+    );
   else if (!config.api.url && !demo)
-    notice("尚未连接 NAS，请填写 Glances API 地址。");
+    notice("尚未连接 NAS，请在导航栏的「监控设置」中填写 Glances API 地址。");
   else if (connection === "offline")
     notice(
       `${connectionError}。${lastSuccess ? "显示最后一次采集结果。" : "请检查地址或网络后重试。"}`,
@@ -323,21 +330,10 @@ function mountWidgets() {
       el(
         "div",
         { class: "no-widgets" },
-        "未启用监控模块",
-        el(
-          "button",
-          {
-            type: "button",
-            class: "button button-outline",
-            id: "enable-widgets",
-          },
-          "选择模块",
-        ),
+        // Empty states explain the canonical entry instead of adding shortcuts.
+        "未启用监控模块，请在导航栏的「监控设置」中选择模块。",
       ),
     );
-  document
-    .getElementById("enable-widgets")
-    ?.addEventListener("click", () => openSettings());
   icons();
 }
 
@@ -424,7 +420,9 @@ function renderHeader() {
  */
 function startPoller() {
   poller?.stop();
-  $("refresh-button", HTMLButtonElement).disabled = false;
+  poller = undefined;
+  // Refresh remains a data action; an unconfigured source is handled in settings.
+  $("refresh-button", HTMLButtonElement).disabled = !demo && !config.api.url;
   $("refresh-button", HTMLElement).classList.remove("is-busy");
   $("refresh-button", HTMLElement).setAttribute("aria-busy", "false");
   if (!demo && !config.api.url) return;
@@ -619,8 +617,10 @@ function validateDraft(next) {
   return !error;
 }
 
-for (const id of ["settings-sidebar", "settings-top", "widgets-button"])
-  $(id, HTMLElement).addEventListener("click", () => openSettings());
+// Keep one manual entry across overview, detail views, and compact navigation.
+$("settings-sidebar", HTMLButtonElement).addEventListener("click", () =>
+  openSettings(),
+);
 for (const id of ["settings-close", "settings-cancel"])
   $(id, HTMLElement).addEventListener("click", () => dialog.close());
 dialog.addEventListener("close", () => {
@@ -730,13 +730,10 @@ for (const input of /** @type {NodeListOf<HTMLInputElement>} */ (
   });
 }
 $("refresh-button", HTMLButtonElement).addEventListener("click", () => {
-  if (!poller || (!config.api.url && !demo)) openSettings(true);
-  else void poller.refresh();
+  void poller?.refresh();
 });
 $("notice-action", HTMLElement).addEventListener("click", () => {
-  if ($("notice-action", HTMLElement).textContent === "重试" && poller)
-    void poller.refresh();
-  else openSettings(!config.api.url);
+  void poller?.refresh();
 });
 $("pause-button", HTMLElement).addEventListener("click", () => {
   paused = !paused;

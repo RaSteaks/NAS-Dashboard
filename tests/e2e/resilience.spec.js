@@ -71,7 +71,8 @@ test("long labels fit and native filters preserve focus and selection", async ({
   await expect(page.locator("#widget-containers")).not.toContainText(
     "backup-worker",
   );
-  await page.getByRole("button", { name: "管理监控模块" }).click();
+  // The shared navigation entry remains reachable before testing compact layouts.
+  await page.getByRole("button", { name: "监控设置", exact: true }).click();
   await page
     .getByLabel("设备名称", { exact: true })
     .fill("我的家庭存储服务器-NAS-with-a-long-device-name");
@@ -82,6 +83,15 @@ test("long labels fit and native filters preserve focus and selection", async ({
       () => document.documentElement.scrollWidth > window.innerWidth,
     );
     expect(overflow).toBe(false);
+    const settings = page.getByRole("button", {
+      name: "监控设置",
+      exact: true,
+    });
+    await expect(settings).toHaveCount(1);
+    await settings.click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(settings).toBeFocused();
   }
 });
 

@@ -134,7 +134,13 @@ become measured zeros. Freshness and connection are explicit states.
 
 ### Buttons and actions
 
-Settings and pause use labeled Lucide icon buttons; refresh has icon and text.
+Monitoring settings has one manual entry in the shared sidebar, retained in its
+compact header layout on narrow screens. It has a visible desktop label and an
+accessible name and tooltip in icon-only layouts. The topbar and monitoring
+toolbars contain no additional settings entry. First-run connection setup still
+opens automatically; notices and empty module states point to navigation settings.
+Refresh and retry only request data, with refresh disabled before a source is set.
+Pause uses a labeled Lucide icon button; refresh has icon and text.
 Primary emphasis is reserved for saving connection settings. Read-only monitoring
 has no destructive controls.
 
