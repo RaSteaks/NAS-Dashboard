@@ -1,6 +1,7 @@
 services:
   nas-dashboard-sync:
-    image: rasteaks/nas-dashboard:1.0.1
+    # 1.0.2 includes the publisher that writes site/build.json for the commit badge.
+    image: rasteaks/nas-dashboard:1.0.2
     container_name: nas-dashboard-sync
     restart: "no"
     environment:

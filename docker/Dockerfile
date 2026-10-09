@@ -15,5 +15,10 @@ COPY publish.sh /usr/local/bin/nas-dashboard-sync
 RUN chmod 755 /usr/local/bin/nas-dashboard-sync
 ENTRYPOINT ["/usr/local/bin/nas-dashboard-sync"]
 
+# Identify the publisher release separately from the website revision synced at runtime.
+ARG VERSION=1.0.2
+ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="NAS Dashboard Sync" \
-    org.opencontainers.image.source="https://github.com/RaSteaks/NAS-Dashboard"
+    org.opencontainers.image.source="https://github.com/RaSteaks/NAS-Dashboard" \
+    org.opencontainers.image.version=${VERSION} \
+    org.opencontainers.image.revision=${VCS_REF}

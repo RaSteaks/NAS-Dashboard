@@ -50,7 +50,8 @@
 ```yaml
 services:
   nas-dashboard-sync:
-    image: rasteaks/nas-dashboard:1.0.1
+    # 1.0.2 includes the publisher that writes site/build.json for the commit badge.
+    image: rasteaks/nas-dashboard:1.0.2
     container_name: nas-dashboard-sync
     restart: "no"
     environment:
@@ -90,6 +91,7 @@ publish: complete; Web Station root is /data/site
 nas-dashboard-repo/
 ├── site/        ← 普通目录，Web Station 文档根目录
 │   ├── index.html
+│   ├── build.json ← 实际同步到的完整 commit
 │   ├── api/index.php
 │   └── js/、vendor/ 等网站文件
 ├── config/      ← 使用同源代理时，自行创建 glances.php
@@ -163,7 +165,9 @@ flowchart LR
   ```
 
 - **镜像或 Compose 配置变更**：拉取镜像并重新创建容器，普通“启动／重启”不会更换镜像。
-  从 `1.0.0` 迁移时保留数据目录，使用 `1.0.1` 发布普通 `site/` 后更新 Web Station 根目录。
+  将项目镜像改为 `rasteaks/nas-dashboard:1.0.2`，在 Container Manager 中拉取新镜像并
+  重建项目，再同步一次。`1.0.1` 不生成 `build.json`，只更新 Git 中的网站文件不会补上
+  版本号。从 `1.0.0` 迁移时保留数据目录，发布普通 `site/` 后更新 Web Station 根目录。
 
 Docker 发布会整体替换 `site/`，本地定制需先备份；同级 `config/` 保留。Git 同步失败或
 缺少 `site/index.html` 时不会发布。目录替换存在短暂空隙，完成后再刷新，并复核新目录的
@@ -173,7 +177,8 @@ Docker 发布会整体替换 `site/`，本地定制需先备份；同级 `config
 `GitHub ea66130`，点击可在新标签页查看对应提交，悬停可查看完整 commit。窄屏时改在
 页脚显示。版本号来自实际发布的代码，每次打开页面都重新读取，不使用浏览器缓存。
 手动部署没有该文件，版本号自动隐藏。更新后刷新页面，用版本号或直接访问
-`/build.json` 确认线上版本；若版本号没有变化，先核对同步结果，再尝试强制刷新。
+`/build.json` 确认线上版本；若该文件返回 404，先核对是否已升级同步镜像并重建容器。
+若版本号没有变化，先核对同步结果，再尝试强制刷新。
 
 ## 故障排查
 
@@ -325,26 +330,30 @@ npm run dev
 <summary>维护者：构建与发布镜像</summary>
 
 镜像基于 [git-sync v4.7.1](https://github.com/kubernetes/git-sync/tree/v4.7.1)，
-增加普通目录发布脚本。网站代码更新只需启动同步容器；同步程序改变才需发布新镜像。
+增加普通目录发布脚本。当前版本为 `1.0.2`，提供 `linux/amd64` 与 `linux/arm64`，
+包含 `build.json` 生成逻辑和发布 commit 日志。网站代码更新只需启动同步容器；
+同步程序改变才需发布新镜像。
 
 ```sh
-docker build -t nas-dashboard:1.0.1 docker
+docker build -t nas-dashboard:1.0.2 docker
 npm run test:docker
 ```
 
-测试通过后选择未发布的新标签，保留已有 `1.0.0` 与 `1.0.1`。首次创建构建器：
+测试通过后选择未发布的新标签，保留已有版本。首次创建构建器：
 
 ```sh
 docker buildx create --name nas-dashboard-builder --driver docker-container
 ```
 
-以下 `1.0.2` 仅是标签示例。取得发布授权后，登录并发布双架构镜像：
+以下 `1.0.3` 仅是下次发布的标签示例，不覆盖已发布的 `1.0.2`。取得发布授权后，
+登录并发布双架构镜像；版本与源码提交会写入镜像标签：
 
 ```sh
 docker login --username rasteaks
-IMAGE_TAG=1.0.2
+IMAGE_TAG=1.0.3
 docker buildx build --builder nas-dashboard-builder \
   --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION="$IMAGE_TAG" --build-arg VCS_REF="$(git rev-parse HEAD)" \
   -t "rasteaks/nas-dashboard:$IMAGE_TAG" -t rasteaks/nas-dashboard:latest \
   --push docker
 ```

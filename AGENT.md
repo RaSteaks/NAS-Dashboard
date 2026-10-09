@@ -22,7 +22,7 @@ on first visit; no private NAS address or credentials ship as defaults.
 - Direct mode connects to a user-entered Glances API. Optional `site/api/index.php`
   provides a Web Station PHP/cURL proxy with a fixed upstream and read-only allowlist.
 - `config/glances.php` is private and excluded from Git and the public web root.
-- `docker-compose.yml` uses `rasteaks/nas-dashboard:1.0.1` with environment
+- `docker-compose.yml` uses `rasteaks/nas-dashboard:1.0.2` with environment
   variables only. The image packages git-sync plus `docker/publish.sh`.
   Git-sync manages /data/.sync and the internal /data/current symlink. Only after
   successful one-time sync does the wrapper stage and publish a normal /data/site
@@ -31,11 +31,14 @@ on first visit; no private NAS address or credentials ship as defaults.
   atomic. Old site files are removed, but sibling config/ and .git/ are untouched.
   Web Station selects <NAS data path>/site, and PHP uses sibling config/glances.php
   by default. Do not place private config in managed site/, .sync/, or current/.
-  Build with `docker build -t nas-dashboard:1.0.1 docker`. The image only downloads
+  Build with `docker build -t nas-dashboard:1.0.2 docker`. The image only downloads
   website code when run. Publishing requires user authorization. Never overwrite
   released 1.0.0; it retains the old symlink-only behavior. The publish wrapper
-  also stamps `site/build.json` with the synced commit; the page footer shows it
-  as the build badge and hides itself when the stamp is absent.
+  also stamps `site/build.json` with the synced commit and logs the published revision;
+  the sidebar (or narrow-screen footer) shows the commit link and hides it when the
+  stamp is absent. Released 1.0.1 lacks this stamp: pull 1.0.2 and recreate the
+  container rather than only restarting or updating the website checkout. Image
+  version/source-revision labels identify the publisher, not the website pulled at runtime.
 - Demo data is explicitly enabled through settings or `?demo=1`; failures never
   substitute simulated values for live telemetry.
 

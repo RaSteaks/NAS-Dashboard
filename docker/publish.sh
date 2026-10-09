@@ -38,7 +38,7 @@ trap 'exit 143' TERM
 # Stage every file first; mktemp creates mode 700, which must be readable by HTTP.
 cp -R "$source/." "$stage/"
 chmod 755 "$stage"
-# The footer build badge reads this stamp. Git-sync targets its checkout
+# The sidebar and narrow-screen footer read this stamp. Git-sync targets its checkout
 # symlink at the synced commit; an unreadable link leaves an empty stamp
 # that the page simply hides.
 link=$(readlink "$repo" 2>/dev/null || true)
@@ -52,4 +52,6 @@ mv "$stage" "$destination"
 if [ -n "$backup" ]; then
   rm -rf -- "$backup"
 fi
+# Report the published revision so NAS logs can confirm the version-file contents.
+echo "publish: commit ${link##*/}"
 echo "publish: complete; Web Station root is /data/site"
