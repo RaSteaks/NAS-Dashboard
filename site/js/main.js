@@ -460,8 +460,8 @@ function repaint() {
   renderAll();
 }
 
-// The publisher stamps site/build.json with the synced commit; manual
-// deployments and the dev server lack the file and the badge stays hidden.
+// Use the published revision rather than GitHub's latest HEAD: the links must
+// identify the files actually deployed. Manual deployments may lack the stamp.
 async function loadBuild() {
   try {
     const response = await fetch(new URL("./build.json", location.href), {
@@ -470,13 +470,26 @@ async function loadBuild() {
     });
     if (!response.ok) return;
     const build = /** @type {{commit?: unknown}} */ (await response.json());
-    if (typeof build?.commit !== "string" || !build.commit) return;
-    const badge = $("build-id", HTMLElement);
-    badge.textContent = `构建 ${build.commit.slice(0, 7)}`;
-    badge.title = `构建 ${build.commit}`;
-    badge.hidden = false;
+    // Only a complete commit hash may become a GitHub navigation target.
+    if (
+      typeof build?.commit !== "string" ||
+      !/^[0-9a-f]{40}$/i.test(build.commit)
+    )
+      return;
+    for (const badge of /** @type {NodeListOf<HTMLAnchorElement>} */ (
+      document.querySelectorAll("a[data-build-id]")
+    )) {
+      badge.textContent = `GitHub ${build.commit.slice(0, 7)}`;
+      badge.title = `GitHub commit ${build.commit}`;
+      badge.href = `https://github.com/RaSteaks/NAS-Dashboard/commit/${build.commit}`;
+      badge.setAttribute(
+        "aria-label",
+        `查看 GitHub 提交 ${build.commit}（在新标签页打开）`,
+      );
+      badge.hidden = false;
+    }
   } catch {
-    // No stamp available; the footer stays clean instead of surfacing an error.
+    // Missing or unreadable metadata must not interrupt monitoring or imply a revision.
   }
 }
 

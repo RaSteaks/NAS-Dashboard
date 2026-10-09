@@ -139,32 +139,64 @@ test("display preferences re-scale paused readings in place", async ({
   );
 });
 
-test("footer shows the deployed commit when the publisher provides one", async ({
+test("deployed commit stays visible in the sidebar with a narrow-screen footer fallback", async ({
   page,
-}) => {
-  await page.goto("/?demo=1");
-  await expect(page.locator("#cpu-value")).not.toHaveText("--");
-  // The dev server publishes no build.json; the badge must stay hidden.
-  await expect(page.locator("#build-id")).toBeHidden();
-
+}, testInfo) => {
+  let status = 404;
+  let commit = "ea661300028bf193e86ecd4d59f008393822268c";
   await page.route(
     "**/build.json",
     /** @param {import("@playwright/test").Route} route */ (route) =>
       route.fulfill({
-        status: 200,
+        status,
         contentType: "application/json",
-        body: JSON.stringify({
-          commit: "ea661300028bf193e86ecd4d59f008393822268c",
-        }),
+        body: JSON.stringify({ commit }),
       }),
   );
+  await page.goto("/?demo=1");
+  await expect(page.locator("#cpu-value")).not.toHaveText("--");
+  await expect(page.locator("[data-build-id]:visible")).toHaveCount(0);
+
+  status = 200;
   await page.reload();
-  await expect(page.locator("#build-id")).toBeVisible();
-  await expect(page.locator("#build-id")).toHaveText("构建 ea66130");
-  await expect(page.locator("#build-id")).toHaveAttribute(
-    "title",
-    "构建 ea661300028bf193e86ecd4d59f008393822268c",
+  const badge = page.locator("[data-build-id]:visible");
+  await expect(badge).toHaveCount(1);
+  await expect(badge).toHaveText("GitHub ea66130");
+  await expect(badge).toHaveAttribute("title", `GitHub commit ${commit}`);
+  await expect(badge).toHaveAttribute(
+    "href",
+    `https://github.com/RaSteaks/NAS-Dashboard/commit/${commit}`,
   );
+  await expect(badge).toHaveAttribute("target", "_blank");
+  await badge.focus();
+  await expect(badge).toBeFocused();
+
+  // The desktop revision must remain at the lower left while content scrolls.
+  const viewport = page.viewportSize();
+  if (viewport && viewport.width > 850) {
+    await expect(page.locator(".sidebar #build-id")).toBeInViewport();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect(page.locator(".sidebar #build-id")).toBeInViewport();
+    await page.evaluate(() => window.scrollTo(0, 0));
+  } else {
+    await expect(page.locator("#build-id")).toBeHidden();
+    await expect(page.locator(".page-footer #build-id-footer")).toBeVisible();
+    await badge.scrollIntoViewIfNeeded();
+  }
+  await page.screenshot({
+    path: `artifacts/build-version-${testInfo.project.name}.png`,
+  });
+
+  // A fresh page reads the new publication instead of retaining the prior revision.
+  commit = "29ed009".padEnd(40, "0");
+  await page.reload();
+  await expect(badge).toHaveText("GitHub 29ed009");
+
+  // A corrupt stamp must never turn into a misleading commit link.
+  commit = "invalid";
+  await page.reload();
+  await expect(badge).toHaveCount(0);
+  await expect(page.locator("#cpu-value")).not.toHaveText("--");
 });
 
 test("network failure keeps prior readings and never switches to demo", async ({

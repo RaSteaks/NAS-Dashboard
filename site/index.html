@@ -8,7 +8,8 @@
     <title>NAS Dashboard · 运行概览</title>
     <!-- Bump the icon version when its artwork changes to refresh cached tabs. -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=3" />
-    <link rel="stylesheet" href="./styles.css?v=2" />
+    <!-- Version shell assets together so cached layouts pick up the commit links. -->
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
     <a class="skip-link" href="#main">跳至监控数据</a>
@@ -54,6 +55,15 @@
             <span id="device-dot" class="status-dot" aria-hidden="true"></span>
           </div>
           <span class="sidebar-footnote">GLANCES · NAS DASHBOARD</span>
+          <!-- Keep the deployed revision visible without scrolling the dashboard. -->
+          <a
+            id="build-id"
+            class="build-id sidebar-build-id"
+            data-build-id
+            target="_blank"
+            rel="noopener noreferrer"
+            hidden
+          ></a>
         </div>
       </aside>
       <div class="workspace">
@@ -285,7 +295,15 @@
               ><span class="footer-dot" aria-hidden="true"></span
               ><span id="footer-status">等待连接 Glances</span></span
             ><span id="last-updated">尚未更新 · 上海时间</span
-            ><span id="build-id" class="build-id" hidden></span>
+            ><!-- Narrow layouts use the footer when the sidebar becomes an icon rail. -->
+            <a
+              id="build-id-footer"
+              class="build-id footer-build-id"
+              data-build-id
+              target="_blank"
+              rel="noopener noreferrer"
+              hidden
+            ></a>
           </footer>
         </main>
       </div>
@@ -411,6 +429,6 @@
     </dialog>
     <noscript>请启用 JavaScript 以读取 NAS 运行数据。</noscript>
     <script defer src="./vendor/chart.umd.min.js"></script>
-    <script type="module" src="./js/main.js"></script>
+    <script type="module" src="./js/main.js?v=3"></script>
   </body>
 </html>

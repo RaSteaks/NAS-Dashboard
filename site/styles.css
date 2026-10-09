@@ -1493,7 +1493,25 @@ th[aria-sort="descending"] .sort-button::after {
   background: var(--color-muted);
 }
 .build-id {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+.build-id:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+.sidebar-build-id {
+  margin: 6px 6px 0;
+}
+/* Show one revision link per layout; the shared hidden attribute guards missing stamps. */
+.footer-build-id {
+  display: none;
 }
 .settings-dialog {
   border: 1px solid var(--color-border);
@@ -1754,8 +1772,12 @@ input[type="checkbox"] {
   .nav-label,
   .nav-link .nav-indicator,
   .sidebar-device,
-  .sidebar-footnote {
+  .sidebar-footnote,
+  .sidebar-build-id {
     display: none;
+  }
+  .footer-build-id {
+    display: inline-flex;
   }
   .nav-link {
     justify-content: center;
