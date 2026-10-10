@@ -8,11 +8,11 @@ import {
   detailCard,
   el,
   icon,
-  icons,
   moduleStatus,
   panelHeading,
   updateStatus,
 } from "../ui/dom.js";
+import { heightPagination } from "../ui/table-pagination.js";
 import { containerStatus } from "../widgets/containers.js";
 
 /**
@@ -30,7 +30,7 @@ function sum(containers, pick) {
 
 /**
  * @param {Container} container
- * @returns {HTMLElement}
+ * @returns {HTMLTableRowElement}
  */
 function containerRow(container) {
   const value = containerStatus(container);
@@ -145,7 +145,7 @@ export const containersView = {
           sort.key === key
             ? { key, dir: sort.dir === "asc" ? "desc" : "asc" }
             : { key, dir: key === "name" ? "asc" : "desc" };
-        page = 0;
+        pagination.resetPage();
         draw();
       });
       header.append(button);
@@ -171,51 +171,30 @@ export const containersView = {
       ),
       body,
     );
-    const footer = el("div", { class: "table-footer" });
-    const previous = el(
-      "button",
+    const viewport = el(
+      "div",
       {
-        type: "button",
-        class: "pagination-button",
-        "aria-label": "上一页明细",
+        class: "table-scroll",
+        tabindex: "0",
+        role: "region",
+        "aria-label": "容器明细表格",
       },
-      "上一页",
+      table,
     );
-    const next = el(
-      "button",
-      {
-        type: "button",
-        class: "pagination-button",
-        "aria-label": "下一页明细",
-      },
-      "下一页",
-    );
-    const count = el("span");
-    footer.append(count, el("div", { class: "pagination" }, previous, next));
+    const pagination = heightPagination(table, viewport, "容器明细", "个容器");
     const tablePanel = el(
       "section",
-      { class: "widget-panel detail-panel span" },
+      { class: "widget-panel detail-panel container-panel span" },
       panelHeading("容器明细", "boxes", state, filter),
-      el(
-        "div",
-        {
-          class: "table-scroll",
-          tabindex: "0",
-          role: "region",
-          "aria-label": "容器明细表格",
-        },
-        table,
-      ),
-      footer,
+      viewport,
+      pagination.footer,
     );
     element.append(summary.card, tablePanel);
     /** @type {Container[]} */
     let containers = [];
-    let page = 0;
     /** @type {string|undefined} */
     let error;
-    const pageSize = 12;
-    // Sorting and paging stay local; neither triggers an extra NAS request.
+    // Sort before fitting pages so every container remains reachable locally.
     const draw = () => {
       const filtered = containers.filter(
         (item) =>
@@ -234,11 +213,6 @@ export const containersView = {
         if (right === null) return -1;
         return (left - right) * factor;
       });
-      page = Math.max(
-        0,
-        Math.min(page, Math.ceil(sorted.length / pageSize) - 1),
-      );
-      const items = sorted.slice(page * pageSize, (page + 1) * pageSize);
       updateStatus(
         state,
         moduleStatus(error ? [error] : [], !containers.length),
@@ -257,39 +231,16 @@ export const containersView = {
               : "descending"
             : "none",
         );
-      if (!items.length)
-        body.replaceChildren(
-          el(
-            "tr",
-            {},
-            el(
-              "td",
-              { colspan: "4", class: "table-empty" },
-              error ||
-                (containers.length
-                  ? "没有符合条件的容器"
-                  : "暂无容器数据，请检查 Glances 容器监控"),
-            ),
-          ),
-        );
-      else body.replaceChildren(...items.map(containerRow));
-      count.textContent = sorted.length
-        ? `${page * pageSize + 1}–${Math.min(sorted.length, (page + 1) * pageSize)} / ${sorted.length} 个容器`
-        : "0 个容器";
-      previous.disabled = page === 0;
-      next.disabled = (page + 1) * pageSize >= sorted.length;
-      icons();
+      pagination.update(
+        sorted.map(containerRow),
+        error ||
+          (containers.length
+            ? "没有符合条件的容器"
+            : "暂无容器数据，请检查 Glances 容器监控"),
+      );
     };
     filter.addEventListener("change", () => {
-      page = 0;
-      draw();
-    });
-    previous.addEventListener("click", () => {
-      page--;
-      draw();
-    });
-    next.addEventListener("click", () => {
-      page++;
+      pagination.resetPage();
       draw();
     });
     return {
@@ -306,7 +257,7 @@ export const containersView = {
         memory.textContent = bytes(sum(containers, (item) => item.memory));
         draw();
       },
-      destroy() {},
+      destroy: pagination.destroy,
     };
   },
 };

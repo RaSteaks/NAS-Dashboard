@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { proxyMihomoSnapshot, validMihomoServer } from "./mihomo-proxy.mjs";
 
 const rootDir = await realpath(
   path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "site"),
@@ -44,6 +45,18 @@ const glancesApiUrl =
   process.env.GLANCES_API_URL ??
   envFile(".env.local").GLANCES_API_URL ??
   envFile(".env").GLANCES_API_URL ??
+  "";
+
+// Local secrets are read on the server only, just like the Web Station proxy.
+const mihomoApiUrl =
+  process.env.MIHOMO_API_URL ??
+  envFile(".env.local").MIHOMO_API_URL ??
+  envFile(".env").MIHOMO_API_URL ??
+  "";
+const mihomoSecret =
+  process.env.MIHOMO_SECRET ??
+  envFile(".env.local").MIHOMO_SECRET ??
+  envFile(".env").MIHOMO_SECRET ??
   "";
 
 /** @type {Record<string, string>} */
@@ -150,6 +163,26 @@ async function proxySnapshot(request, response) {
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
+  if (url.pathname === "/api/mihomo.php") {
+    if (request.method !== "GET") {
+      response.setHeader("Allow", "GET");
+      json(response, 405, { error: "只允许 GET 请求" });
+    } else if (!validMihomoServer(mihomoApiUrl, mihomoSecret)) {
+      json(response, 503, {
+        error: "请在服务端配置 MIHOMO_API_URL 与 MIHOMO_SECRET。",
+      });
+    } else {
+      const controller = new AbortController();
+      response.on("close", () => controller.abort());
+      const snapshot = await proxyMihomoSnapshot(
+        mihomoApiUrl,
+        mihomoSecret,
+        controller.signal,
+      );
+      if (!response.destroyed) json(response, 200, snapshot);
+    }
+    return;
+  }
   if (url.pathname === "/api/index.php") {
     await proxySnapshot(request, response);
     return;
@@ -198,7 +231,13 @@ server.listen(port, host, () => {
   console.log(`NAS Dashboard 开发服务已启动: http://${host}:${port}`);
   console.log(
     glancesApiUrl
-      ? "同源代理已启用（GLANCES_API_URL 已配置）"
-      : "同源代理未配置：在 .env.local 中设置 GLANCES_API_URL 后重启",
+      ? "Glances 同源代理已启用（GLANCES_API_URL 已配置）"
+      : "Glances 同源代理未配置：在 .env.local 中设置 GLANCES_API_URL 后重启",
+  );
+  // Report configuration presence only; controller URLs and Secrets stay private.
+  console.log(
+    mihomoApiUrl
+      ? "mihomo 同源代理已启用（MIHOMO_API_URL 已配置）"
+      : "mihomo 同源代理未配置：在 .env.local 中设置 MIHOMO_API_URL 后重启",
   );
 });

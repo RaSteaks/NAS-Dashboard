@@ -9,6 +9,8 @@ export const defaults = {
   name: "我的 NAS",
   subtitle: "Synology · 系统监控",
   api: { mode: "direct", url: "" },
+  // The optional module is disabled by the widget list, not by storing a Secret.
+  mihomo: { url: "./api/mihomo.php" },
   refreshSeconds: 5,
   timeoutSeconds: 8,
   historyMinutes: 15,
@@ -23,7 +25,7 @@ export const defaults = {
 
 export const storageKey = "nas-dashboard.settings.v1";
 /** @type {WidgetId[]} */
-const widgetIds = ["resources", "storage", "network", "containers"];
+const widgetIds = ["resources", "storage", "network", "containers", "mihomo"];
 /** @type {Config["unit"][]} */
 const byteUnits = ["auto", "B", "KB", "MB", "GB", "TB"];
 
@@ -77,6 +79,9 @@ export function mergeConfig(input, base = defaults) {
     typeof value.api.url === "string"
   )
     config.api = { mode: value.api.mode, url: value.api.url.trim() };
+  if (value.mihomo && typeof value.mihomo.url === "string")
+    // Copy only the public URL, including when importing old or unknown settings.
+    config.mihomo = { url: value.mihomo.url.trim() };
   for (const field of /** @type {["refreshSeconds","timeoutSeconds","historyMinutes"]} */ ([
     "refreshSeconds",
     "timeoutSeconds",
@@ -168,6 +173,7 @@ export function saveSettings(config) {
       JSON.stringify({
         name: config.name,
         api: config.api,
+        mihomo: { url: config.mihomo.url },
         refreshSeconds: config.refreshSeconds,
         widgets: config.widgets,
         unit: config.unit,

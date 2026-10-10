@@ -9,7 +9,7 @@ const Chart = /** @type {any} */ (typeof window === "undefined" ? {} : window)
 
 /**
  * @typedef {object} Series
- * @property {"cpu"|"memory"|"rx"|"tx"} key
+ * @property {"cpu"|"memory"|"rx"|"tx"|"connections"} key
  * @property {string} label
  * @property {string} color
  * @property {boolean} [fill]
@@ -18,13 +18,21 @@ const Chart = /** @type {any} */ (typeof window === "undefined" ? {} : window)
 /**
  * @param {HTMLCanvasElement} canvas
  * @param {Series[]} series
- * @param {boolean} [percent=false]
+ * @param {boolean|"bytes"|"count"} [mode=false] True is percent; false is bytes/second.
  * @returns {{
  *   update: (history: HistoryPoint[], windowMinutes: number) => void,
  *   destroy: () => void,
  * }}
  */
-export function lineChart(canvas, series, percent = false) {
+export function lineChart(canvas, series, mode = false) {
+  const percent = mode === true;
+  const count = mode === "count";
+  const unit = () =>
+    percent
+      ? "%"
+      : count
+        ? " 条"
+        : ` ${chartByteScale().unit}${mode === "bytes" ? "" : "/s"}`;
   const colors = getComputedStyle(document.documentElement);
   const chart = new Chart(canvas, {
     type: "line",
@@ -60,7 +68,7 @@ export function lineChart(canvas, series, percent = false) {
             title: (/** @type {any[]} */ items) =>
               items.length ? time(items[0].parsed.x ?? Date.now()) : "",
             label: (/** @type {any} */ item) =>
-              `${item.dataset.label}: ${item.parsed.y?.toFixed(1) ?? "--"}${percent ? "%" : ` ${chartByteScale().unit}/s`}`,
+              `${item.dataset.label}: ${item.parsed.y?.toFixed(count ? 0 : 1) ?? "--"}${unit()}`,
           },
         },
       },
@@ -84,6 +92,7 @@ export function lineChart(canvas, series, percent = false) {
           border: { display: false },
           grid: { color: colors.getPropertyValue("--color-grid").trim() },
           ticks: {
+            ...(count ? { precision: 0 } : {}),
             maxTicksLimit: 5,
             color: colors.getPropertyValue("--color-muted").trim(),
             font: { size: 11 },
@@ -99,7 +108,9 @@ export function lineChart(canvas, series, percent = false) {
       const end = history.at(-1)?.timestamp ?? Date.now();
       const start = end - windowMinutes * 60000;
       // Re-read per update so a saved unit preference re-scales live charts.
-      const divisor = percent ? 1 : chartByteScale().divisor;
+      // Memory and usage are bytes, connection counts are unitless, and NAS
+      // percentages retain their existing 0–100 range.
+      const divisor = percent || count ? 1 : chartByteScale().divisor;
       chart.options.scales.x.min = start;
       chart.options.scales.x.max = end;
       chart.data.datasets.forEach(
@@ -110,14 +121,36 @@ export function lineChart(canvas, series, percent = false) {
               const value = point[series[index].key];
               return {
                 x: point.timestamp,
-                y: value === null ? null : value / divisor,
+                y: value == null ? null : value / divisor,
               };
             });
-          // Show the first real sample before enough points exist to draw a trace.
-          dataset.pointRadius = dataset.data.length === 1 ? 3 : 0;
+          // Isolated readings across gaps need a visible point. Rapid manual
+          // refreshes can also be too close to draw a trace at the time scale.
+          dataset.pointRadius = dataset.data.map(
+            (
+              /** @type {{x: number, y: number|null}} */ point,
+              /** @type {number} */ index,
+              /** @type {{x: number, y: number|null}[]} */ points,
+            ) => {
+              if (point.y === null) return 0;
+              const previous = points[index - 1],
+                next = points[index + 1];
+              const isolated =
+                (!previous || previous.y === null) &&
+                (!next || next.y === null);
+              const compactLast =
+                index === points.length - 1 &&
+                previous &&
+                previous.y !== null &&
+                point.x - previous.x < 1000;
+              return isolated || compactLast ? 3 : 0;
+            },
+          );
         },
       );
-      chart.update("none");
+      // Resolve shared point styles after a null baseline; animation is already
+      // disabled above, so a normal update also remains immediate.
+      chart.update();
     },
     destroy: () => chart.destroy(),
   };

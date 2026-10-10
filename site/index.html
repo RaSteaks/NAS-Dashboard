@@ -9,7 +9,7 @@
     <!-- Bump the icon version when its artwork changes to refresh cached tabs. -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=3" />
     <!-- Version shell assets together so cached pages pick up navigation changes. -->
-    <link rel="stylesheet" href="./styles.css?v=4" />
+    <link rel="stylesheet" href="./styles.css?v=6" />
   </head>
   <body>
     <a class="skip-link" href="#main">跳至监控数据</a>
@@ -40,6 +40,10 @@
           >
           <a href="#containers" class="nav-link"
             ><i data-lucide="boxes"></i>容器服务</a
+          >
+          <!-- Optional source routes follow their module's enabled state. -->
+          <a href="#mihomo" class="nav-link" hidden
+            ><i data-lucide="plug-zap"></i>mihomo 监控</a
           >
         </nav>
         <div class="sidebar-bottom">
@@ -95,6 +99,7 @@
           <a href="#storage"><i data-lucide="hard-drive"></i>存储空间</a>
           <a href="#network"><i data-lucide="network"></i>网络流量</a>
           <a href="#containers"><i data-lucide="boxes"></i>容器服务</a>
+          <a href="#mihomo" hidden><i data-lucide="plug-zap"></i>mihomo 监控</a>
         </nav>
         <main id="main" tabindex="-1">
           <div class="page-heading">
@@ -281,6 +286,25 @@
             data-view="containers"
             hidden
           ></section>
+          <section
+            id="view-mihomo"
+            class="view view-detail"
+            data-view="mihomo"
+            hidden
+          ></section>
+          <!-- Sibling mihomo pages share the same optional module and poller. -->
+          <section
+            id="view-mihomo-connections"
+            class="view view-detail"
+            data-view="mihomo-connections"
+            hidden
+          ></section>
+          <section
+            id="view-mihomo-usage"
+            class="view view-detail"
+            data-view="mihomo-usage"
+            hidden
+          ></section>
           <footer class="page-footer">
             <span
               ><span class="footer-dot" aria-hidden="true"></span
@@ -396,6 +420,33 @@
             <legend>监控模块</legend>
             <div id="module-options" class="module-options"></div>
           </fieldset>
+          <!-- Credentials stay in the private server config; this is only its public endpoint. -->
+          <div class="form-field">
+            <label for="setting-mihomo-url">mihomo 同源代理地址</label>
+            <input
+              id="setting-mihomo-url"
+              type="text"
+              inputmode="url"
+              placeholder="./api/mihomo.php"
+              aria-describedby="mihomo-help mihomo-error"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <span id="mihomo-help" class="field-hint"
+              >启用 mihomo 监控后填写；内核地址和 Secret 仅在服务端配置。</span
+            >
+            <span id="mihomo-error" class="field-error" role="status"></span>
+          </div>
+          <div class="connection-test">
+            <button
+              id="mihomo-test-button"
+              class="button button-outline"
+              type="button"
+            >
+              <i data-lucide="plug-zap"></i><span>测试 mihomo 连接</span>
+            </button>
+            <span id="mihomo-test-result" role="status"></span>
+          </div>
           <div class="demo-switch">
             <span id="demo-label">演示数据</span
             ><input
@@ -420,6 +471,6 @@
     </dialog>
     <noscript>请启用 JavaScript 以读取 NAS 运行数据。</noscript>
     <script defer src="./vendor/chart.umd.min.js"></script>
-    <script type="module" src="./js/main.js?v=4"></script>
+    <script type="module" src="./js/main.js?v=6"></script>
   </body>
 </html>

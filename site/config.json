@@ -5,6 +5,9 @@
     "mode": "direct",
     "url": ""
   },
+  "mihomo": {
+    "url": "./api/mihomo.php"
+  },
   "refreshSeconds": 5,
   "timeoutSeconds": 8,
   "historyMinutes": 15,

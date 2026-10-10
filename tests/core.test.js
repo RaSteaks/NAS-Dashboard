@@ -373,6 +373,8 @@ describe("polling lifecycle", () => {
       intervalMs: 5000,
       fetch: fetcher,
       onData,
+      // Callers decide which telemetry counts as a usable sample.
+      hasData: (value) => Boolean(value.data.cpu),
       onError: vi.fn(),
       onBusy: vi.fn(),
     });
@@ -397,6 +399,7 @@ describe("polling lifecycle", () => {
       intervalMs: 5000,
       fetch: fetcher,
       onData: vi.fn(),
+      hasData: (value) => Boolean(value.data.cpu),
       onError: vi.fn(),
       onBusy: vi.fn(),
     });
@@ -431,12 +434,14 @@ describe("Docker health states", () => {
 });
 
 describe("Web Station proxy syntax", () => {
-  it.each(["../site/api/index.php", "../config/glances.example.php"])(
-    "parses %s as PHP 8",
-    (file) => {
-      const source = readFileSync(new URL(file, import.meta.url), "utf8");
-      const parser = new PhpParser.Engine({ parser: { version: "8.1" } });
-      expect(() => parser.parseCode(source, file)).not.toThrow();
-    },
-  );
+  it.each([
+    "../site/api/index.php",
+    "../config/glances.example.php",
+    "../site/api/mihomo.php",
+    "../config/mihomo.example.php",
+  ])("parses %s as PHP 8", (file) => {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    const parser = new PhpParser.Engine({ parser: { version: "8.1" } });
+    expect(() => parser.parseCode(source, file)).not.toThrow();
+  });
 });

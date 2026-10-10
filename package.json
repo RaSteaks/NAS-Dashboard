@@ -10,7 +10,8 @@
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:docker": "node --test tests/docker/sync.test.js"
+    "test:docker": "node --test tests/docker/sync.test.js",
+    "test:php": "node --test tests/php/mihomo.test.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

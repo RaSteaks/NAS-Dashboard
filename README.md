@@ -1,6 +1,6 @@
 # NAS Dashboard
 
-中文 NAS 监控面板，读取 **Glances 4 REST API**，通过 **Synology Web Station** 托管。
+中文 NAS 监控面板，读取 **Glances 4 REST API**，并可选接入 **mihomo 内核 API**，通过 **Synology Web Station** 托管。
 网站无需构建；Docker 可选用于同步代码，同步容器在拉取完成后即停止，不持续运行。
 首次访问填写 API 地址，设置保存在当前浏览器。连接、显示偏好和监控模块统一通过
 导航栏中的「监控设置」调整。
@@ -9,14 +9,15 @@
 
 ## 功能
 
-| 模块     | 概览与详情                            |
-| -------- | ------------------------------------- |
-| 系统资源 | CPU、内存、负载、温度、系统信息与趋势 |
-| 存储空间 | 卷容量、使用率、设备与文件系统        |
-| 网络流量 | 收发速率、接口筛选与链路状态          |
-| 容器服务 | 容器状态、CPU、内存与可排序列表       |
+| 模块        | 概览与详情                                                 |
+| ----------- | ---------------------------------------------------------- |
+| 系统资源    | CPU、内存、负载、温度、系统信息与趋势                      |
+| 存储空间    | 卷容量、使用率、设备与文件系统                             |
+| 网络流量    | 收发速率、接口筛选与链路状态                               |
+| 容器服务    | 容器状态、CPU、内存与可排序列表                            |
+| mihomo 监控 | 概览趋势、连接明细、按设备／域名／出站／进程统计的会话用量 |
 
-支持自动刷新、手动刷新和暂停，四个模块共用轮询数据。缺失指标显示 `--`，连接失败保留
+支持自动刷新、手动刷新和暂停，NAS 模块共用 Glances 轮询数据，mihomo 独立采集。缺失指标显示 `--`，连接失败保留
 上次数据并标记状态。趋势只记录当前页面打开期间的采样；演示数据需通过 `?demo=1`
 或设置开关主动启用。
 
@@ -27,8 +28,8 @@
 
 ### 1. 准备环境
 
-- NAS 安装 **Web Station**，并已运行 Glances Web 模式（`glances -w`）。
-  API 地址形如 `http://NAS-IP:61208/api/4`。
+- NAS 安装 **Web Station**。NAS 监控需要运行 Glances Web 模式（`glances -w`），
+  API 地址形如 `http://NAS-IP:61208/api/4`；仅使用 mihomo 时可以不运行 Glances。
 - 使用同源代理时，安装 **PHP 8.1+**；使用 Docker 同步时，安装 **Container Manager**。
 - 选择未占用的门户端口，例如 `6080`。避免 `6000` 等浏览器限制端口。
 - 文中 NAS 路径（如 `/volume1/docker/...`）均为**占位符**，实际部署时需替换为 NAS
@@ -94,7 +95,7 @@ nas-dashboard-repo/
 │   ├── build.json ← 实际同步到的完整 commit
 │   ├── api/index.php
 │   └── js/、vendor/ 等网站文件
-├── config/      ← 使用同源代理时，自行创建 glances.php
+├── config/      ← 按数据源自行创建 glances.php / mihomo.php
 ├── .sync/       ← 内部 Git 数据，仅 Docker 同步使用
 └── current      ← 内部符号链接，File Station 可能不显示
 ```
@@ -153,9 +154,70 @@ flowchart LR
 私有配置仅放在公开网站目录之外的 `config/` 或其他私有路径，不放入 `site/`、`.sync/`、
 `current/` 或 Git。代理只转发固定上游的 GET 监控请求，不接受浏览器传入的上游地址。
 
+#### mihomo 只读监控（可选）
+
+此模块仅通过 PHP 同源代理连接，需要上述 PHP 网站服务和 `curl` 扩展。mihomo 的
+`external-controller` 必须能从 PHP 所在的 NAS 访问；填写控制 API 端口（常见为 `9090`）。
+可与 Glances 同时使用，也可单独使用。
+
+1. 参照 [`config/mihomo.example.php`](./config/mihomo.example.php)，在公开 `site/` 同级的
+   私有 `config/` 中创建 `mihomo.php`：
+
+   ```php
+   <?php
+   // 地址和 Secret 留在服务端，Secret 应与 mihomo 配置一致。
+   return [
+       'api_url' => 'http://NAS-IP:9090',
+       'secret' => 'replace-with-your-secret',
+   ];
+   ```
+
+   PHP 与 mihomo 同机且控制端口已向宿主机开放时，可以使用 `127.0.0.1`。
+   核对 PHP 对私有配置的读取权限及 `open_basedir`；私有配置已被 Git 忽略。
+
+2. 在“监控设置”的模块列表中勾选“mihomo 监控”，保留同源代理地址
+   `./api/mihomo.php`，点击“测试 mihomo 连接”后保存。仅使用此数据源时，Glances 地址可留空。
+3. NAS 概览保留 mihomo 汇总卡片；桌面侧栏或手机导航的“mihomo 监控”进入模块，
+   在“概览”“连接”“用量”三个页面间切换。所有页面复用采样，导航不会额外请求上游。
+   刷新、暂停和后台停止同时作用于已启用的数据源。
+
+参考 [MetaCubeXD](https://github.com/MetaCubeX/metacubexd) 的信息组织方式，三个页面提供：
+
+- **概览**：上传／下载、累计流量、内存、连接数与版本，流量／内存／连接趋势，
+  协议分布和已加载连接的出站速率排行。
+- **连接**：活跃连接及本页观察到的近期结束连接。支持按目标、来源、进程、规则和
+  链路搜索，协议筛选、排序、自适应分页和只读详情；长表格可横向滚动。
+- **用量**：本次打开页面后有效采样到的流量增量，按设备、域名／目标、出站节点、
+  进程或规则汇总，提供排行、趋势与分类明细。切换页面、显示单位或概览的趋势窗口
+  不会清空用量，刷新／关闭页面或更换 mihomo 地址后重新开始。
+
+用量只存放在当前页面内存中，不写入 localStorage 或数据库。首次出现的连接用于建立
+计数基线，不把页面打开前的累计流量计入会话。趋势时间段会随会话长度合并，已记录的
+总字节数完整保留，不受概览 `historyMinutes` 限制。暂停、后台、采样失败及两次采样之间
+已结束的短连接可能造成统计缺口；这些时段不会被伪造成已测量数据。
+
+| 服务端环境变量   | 用途                                                        |
+| ---------------- | ----------------------------------------------------------- |
+| `MIHOMO_CONFIG`  | 指定其他私有 PHP 配置文件，默认读取同级 `config/mihomo.php` |
+| `MIHOMO_API_URL` | 覆盖配置中的 `api_url`，支持 HTTP / HTTPS                   |
+| `MIHOMO_SECRET`  | 覆盖配置中的 `secret`；浏览器不接收或保存此值               |
+
+代理仅 GET 读取 `/connections`、`/memory`、`/version`，返回汇总信息和经过白名单过滤的
+连接明细（目标、来源、进程、规则、链路等），不转发未知元数据或凭据。每次最多返回
+500 条活跃连接明细，并保留内核完整连接数与截取标记；统计和分布基于已加载的明细，
+近期结束最多保留 200 条。旧版只返回汇总数据的代理仍可读取基础指标，明细页会提示更新。
+各接口独立报错：例如版本不可用时，流量仍可继续采集。认证失败检查
+服务端 Secret；代理返回 503 时检查 PHP / cURL、配置路径和上游地址。
+
+上传／下载是两次累计字节采样之间的**区间平均速率**，按实际间隔计算。首次采样、
+连接采样失败、暂停恢复、切换地址或计数重置后，等待下一次有效采样，速率显示 `--`。
+累计值由内核提供，重启或重置后重新累计；统计范围为 mihomo 处理的流量。内存接口
+是持续推送的 JSON 流，代理丢弃首帧占位值、取第二帧后主动关闭；刷新间隔沿用现有
+请求完成后调度的方式，实际周期包含请求耗时。接口说明见 [mihomo 官方 API 文档](https://wiki.metacubex.one/api/)。
+
 ### 4. 后续更新
 
-- **手动部署**：替换完整 `site/`，保留同级 `config/glances.php`。
+- **手动部署**：替换完整 `site/`，保留同级 `config/glances.php` 和 `config/mihomo.php`。
 - **Docker 同步**：再次启动已停止的容器，确认发布日志和退出码：
 
   ```sh
@@ -274,18 +336,19 @@ Glances 端口避免直接暴露公网，使用 VPN 或认证入口。面板展�
 公共默认值位于 [`site/config.json`](./site/config.json)，浏览器已保存的连接设置优先。
 公共配置不填写凭据。
 
-| 配置项                              | 默认值与作用                                    |
-| ----------------------------------- | ----------------------------------------------- |
-| `name` / `subtitle`                 | `我的 NAS` / `Synology · 系统监控`              |
-| `api`                               | `mode: direct`，`url` 为空，首次访问填写        |
-| `refreshSeconds` / `timeoutSeconds` | 刷新间隔 `5` 秒，超时 `8` 秒                    |
-| `historyMinutes`                    | 当前页面保留 `15` 分钟趋势                      |
-| `volumePattern`                     | `^/volume[0-9]+$`，筛选群晖存储卷               |
-| `networkInterfaces`                 | `[]`，自动筛选；填写接口名可显式指定            |
-| `networkIgnorePattern`              | 忽略回环和常见虚拟接口，具体正则见配置文件      |
-| `widgets`                           | `resources`、`storage`、`network`、`containers` |
-| `unit` / `unitBase`                 | `auto` / `1024`，字节显示单位与换算进制         |
-| `thresholds`                        | CPU、内存、存储为 `85`，温度为 `70`             |
+| 配置项                              | 默认值与作用                                         |
+| ----------------------------------- | ---------------------------------------------------- |
+| `name` / `subtitle`                 | `我的 NAS` / `Synology · 系统监控`                   |
+| `api`                               | `mode: direct`，`url` 为空，首次访问填写             |
+| `mihomo.url`                        | `./api/mihomo.php`，仅允许同源代理地址；模块默认关闭 |
+| `refreshSeconds` / `timeoutSeconds` | 刷新间隔 `5` 秒，超时 `8` 秒                         |
+| `historyMinutes`                    | 当前页面保留 `15` 分钟趋势                           |
+| `volumePattern`                     | `^/volume[0-9]+$`，筛选群晖存储卷                    |
+| `networkInterfaces`                 | `[]`，自动筛选；填写接口名可显式指定                 |
+| `networkIgnorePattern`              | 忽略回环和常见虚拟接口，具体正则见配置文件           |
+| `widgets`                           | `resources`、`storage`、`network`、`containers`      |
+| `unit` / `unitBase`                 | `auto` / `1024`，字节显示单位与换算进制              |
+| `thresholds`                        | CPU、内存、存储为 `85`，温度为 `70`                  |
 
 ## 开发与验证
 
@@ -298,20 +361,24 @@ npm run dev
 
 打开终端给出的地址。本地同源代理由 Node.js 模拟，无需 PHP：复制 `.env.example` 为
 `.env.local`，填写 `GLANCES_API_URL` 后重新运行 `npm run dev`；面板地址仍使用
-`./api/index.php`。NAS 上的 PHP 代理使用前述私有配置，不会读取这份本地 `.env.local`。
+`./api/index.php`。mihomo 填写 `MIHOMO_API_URL`、`MIHOMO_SECRET`，面板使用
+`./api/mihomo.php`。NAS 上的 PHP 代理使用前述私有配置，不会读取这份本地 `.env.local`。
 
-| 命令                            | 检查内容                                     |
-| ------------------------------- | -------------------------------------------- |
-| `npm run typecheck`             | JSDoc / TypeScript 类型                      |
-| `npm test`                      | 单元测试                                     |
-| `npm run format:check`          | Prettier 格式                                |
-| `npm run test:e2e`              | 浏览器端到端与无障碍检查                     |
-| `npm run test:docker`           | 真实容器同步、目录发布、失败保留与文档一致性 |
-| `docker compose config --quiet` | Compose 配置                                 |
+| 命令                            | 检查内容                                               |
+| ------------------------------- | ------------------------------------------------------ |
+| `npm run typecheck`             | JSDoc / TypeScript 类型                                |
+| `npm test`                      | 单元测试                                               |
+| `npm run format:check`          | Prettier 格式                                          |
+| `npm run test:e2e`              | 浏览器端到端与无障碍检查                               |
+| `npm run test:docker`           | 真实容器同步、目录发布、失败保留与文档一致性           |
+| `npm run test:php`              | PHP/cURL mihomo 代理、认证、响应过滤、内存流和故障处理 |
+| `docker compose config --quiet` | Compose 配置                                           |
 
 浏览器测试首次运行需 `npx playwright install chromium`，也可用
 `PLAYWRIGHT_CHANNEL=chrome` 选择已安装的 Chrome。Docker 测试需要 Docker 与 Git，
 会构建镜像并使用临时仓库；本地验证不替代 NAS ACL、PHP 和门户实测。
+`test:php` 使用 `php:8.3-cli` 临时容器和模拟上游，首次运行会下载镜像，完成后清理容器及
+测试配置；无需运行真实 mihomo，也不会访问 NAS。
 
 <details>
 <summary>扩展监控模块</summary>

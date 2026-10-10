@@ -6,11 +6,11 @@ import { bytes, decimal } from "../core/format.js";
 import {
   el,
   icon,
-  icons,
   moduleStatus,
   panelHeading,
   updateStatus,
 } from "../ui/dom.js";
+import { heightPagination } from "../ui/table-pagination.js";
 
 /**
  * @param {Pick<Container, "status">} container
@@ -73,48 +73,28 @@ export const containersWidget = {
       ),
       body,
     );
-    const footer = el("div", { class: "table-footer" });
-    const previous = el(
-      "button",
+    const viewport = el(
+      "div",
       {
-        type: "button",
-        class: "pagination-button",
-        "aria-label": "上一页容器",
+        class: "table-scroll",
+        tabindex: "0",
+        role: "region",
+        "aria-label": "容器数据表格",
       },
-      "上一页",
+      table,
     );
-    const next = el(
-      "button",
-      {
-        type: "button",
-        class: "pagination-button",
-        "aria-label": "下一页容器",
-      },
-      "下一页",
-    );
-    const count = el("span");
-    footer.append(count, el("div", { class: "pagination" }, previous, next));
+    const pagination = heightPagination(table, viewport, "容器", "个容器");
+    element.classList.add("container-panel");
     element.append(
       panelHeading("容器服务", "boxes", state, filter),
-      el(
-        "div",
-        {
-          class: "table-scroll",
-          tabindex: "0",
-          role: "region",
-          "aria-label": "容器数据表格",
-        },
-        table,
-      ),
-      footer,
+      viewport,
+      pagination.footer,
     );
     /** @type {Container[]} */
     let containers = [];
-    let page = 0;
     /** @type {string|undefined} */
     let error;
-    const pageSize = 6;
-    // Keep pagination local; changing a filter never triggers an extra NAS request.
+    // Fit all available rows before paging; filters reuse the same NAS snapshot.
     const draw = () => {
       const filtered = containers.filter(
         (item) =>
@@ -123,88 +103,57 @@ export const containersWidget = {
             ? containerStatus(item).isRunning
             : containerStatus(item).label === "已停止"),
       );
-      page = Math.max(
-        0,
-        Math.min(page, Math.ceil(filtered.length / pageSize) - 1),
-      );
-      const items = filtered.slice(page * pageSize, (page + 1) * pageSize);
       updateStatus(
         state,
         moduleStatus(error ? [error] : [], !containers.length),
       );
-      if (!items.length)
-        body.replaceChildren(
-          el(
+      pagination.update(
+        filtered.map((container) => {
+          const value = containerStatus(container);
+          return el(
             "tr",
             {},
             el(
               "td",
-              { colspan: "4", class: "table-empty" },
-              error ||
-                (containers.length
-                  ? "没有符合条件的容器"
-                  : "暂无容器数据，请检查 Glances 容器监控"),
-            ),
-          ),
-        );
-      else
-        body.replaceChildren(
-          ...items.map((container) => {
-            const value = containerStatus(container);
-            return el(
-              "tr",
               {},
               el(
-                "td",
-                {},
+                "div",
+                { class: "container-name" },
+                el("span", { class: "container-symbol" }, icon("box")),
                 el(
                   "div",
-                  { class: "container-name" },
-                  el("span", { class: "container-symbol" }, icon("box")),
+                  {},
+                  el("strong", {}, container.name),
                   el(
-                    "div",
-                    {},
-                    el("strong", {}, container.name),
-                    el(
-                      "span",
-                      { class: "container-image", title: container.image },
-                      container.image,
-                    ),
+                    "span",
+                    { class: "container-image", title: container.image },
+                    container.image,
                   ),
                 ),
               ),
+            ),
+            el(
+              "td",
+              {},
               el(
-                "td",
-                {},
-                el(
-                  "span",
-                  { class: `container-status ${value.tone}` },
-                  el("i", { class: "status-dot", "aria-hidden": "true" }),
-                  value.label,
-                ),
+                "span",
+                { class: `container-status ${value.tone}` },
+                el("i", { class: "status-dot", "aria-hidden": "true" }),
+                value.label,
               ),
-              el("td", { class: "table-number" }, `${decimal(container.cpu)}%`),
-              el("td", { class: "table-number" }, bytes(container.memory)),
-            );
-          }),
-        );
-      count.textContent = filtered.length
-        ? `${page * pageSize + 1}–${Math.min(filtered.length, (page + 1) * pageSize)} / ${filtered.length} 个容器`
-        : "0 个容器";
-      previous.disabled = page === 0;
-      next.disabled = (page + 1) * pageSize >= filtered.length;
-      icons();
+            ),
+            el("td", { class: "table-number" }, `${decimal(container.cpu)}%`),
+            el("td", { class: "table-number" }, bytes(container.memory)),
+          );
+        }),
+        error ||
+          (containers.length
+            ? "没有符合条件的容器"
+            : "暂无容器数据，请检查 Glances 容器监控"),
+      );
     };
     filter.addEventListener("change", () => {
-      page = 0;
-      draw();
-    });
-    previous.addEventListener("click", () => {
-      page--;
-      draw();
-    });
-    next.addEventListener("click", () => {
-      page++;
+      pagination.resetPage();
       draw();
     });
     return {
@@ -213,7 +162,7 @@ export const containersWidget = {
         error = snapshot.errors.containers;
         draw();
       },
-      destroy() {},
+      destroy: pagination.destroy,
     };
   },
 };

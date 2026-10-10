@@ -23,7 +23,8 @@ export function requestError(error) {
  * @param {Response} response
  * @returns {Promise<unknown>}
  */
-async function readJson(response) {
+// Both sources share HTTP diagnostics; their snapshot contracts stay separate.
+export async function readJson(response) {
   if (!response.ok) {
     if (response.status === 401 || response.status === 403)
       throw new Error("访问被拒绝，请检查代理认证配置");

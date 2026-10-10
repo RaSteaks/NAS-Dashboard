@@ -1204,6 +1204,42 @@ h1 {
 .pagination-button:hover:not(:disabled) {
   background: var(--color-background);
 }
+/* Container rows use the panel's space, without enlarging their own grid row. */
+.container-panel {
+  display: flex;
+  flex-direction: column;
+}
+.container-panel > .panel-heading,
+.container-panel > .table-footer {
+  flex-shrink: 0;
+}
+.container-panel > .table-scroll {
+  flex: 1;
+  contain: size;
+  scrollbar-gutter: stable;
+}
+/* Stable columns keep measured wrapped-row heights identical across pages. */
+.container-panel .container-table {
+  table-layout: fixed;
+}
+.container-panel .container-table th:first-child {
+  width: 48%;
+}
+.container-panel .container-table th:nth-child(2) {
+  width: 16%;
+}
+.container-panel .container-table th:nth-child(3) {
+  width: 14%;
+}
+.container-panel .container-table th:last-child {
+  width: 22%;
+}
+/* Only the detail table is viewport-sized; other views keep document scrolling. */
+.view-detail > .container-panel {
+  height: 70svh;
+  min-height: 430px;
+  max-height: 800px;
+}
 .no-widgets {
   grid-column: 1 / -1;
   display: flex;
@@ -1370,6 +1406,270 @@ h1 {
 }
 .fact-row.warning strong {
   color: var(--color-warning);
+}
+/* Overview and detail share telemetry geometry and the established data roles. */
+.mihomo-facts {
+  padding: 0 20px 12px;
+}
+.mihomo-facts .fact-row:last-child {
+  grid-column: 1 / -1;
+}
+.mihomo-footnote {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+/* Mihomo adds three sibling pages while retaining the shared panel, control,
+   chart and table roles. Tables own horizontal overflow, never the page shell. */
+.widget-mihomo {
+  grid-column: 1 / -1;
+}
+.mihomo-subnav,
+.mihomo-shortcuts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mihomo-subnav {
+  margin: 0 0 20px;
+}
+.mihomo-subnav a,
+.mihomo-shortcuts a {
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  background: var(--color-surface);
+}
+.mihomo-subnav a:hover,
+.mihomo-shortcuts a:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.mihomo-subnav a.active {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-soft);
+  font-weight: 600;
+}
+.mihomo-shortcuts {
+  padding: 0 20px 16px;
+}
+.mihomo-trend-grid {
+  margin-top: 20px;
+}
+.mihomo-breakdown {
+  padding: 16px 20px;
+}
+.mihomo-breakdown + .mihomo-breakdown {
+  border-top: 1px solid var(--color-grid);
+}
+.mihomo-breakdown-heading {
+  font-size: 12px;
+  color: var(--color-secondary);
+  margin-bottom: 12px;
+}
+.mihomo-flow-bar {
+  display: flex;
+  height: 8px;
+  background: var(--color-grid);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+.mihomo-flow-bar > span:first-child {
+  background: var(--color-network);
+}
+.mihomo-flow-bar > span:last-child {
+  background: var(--color-upload);
+}
+.mihomo-split {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 10px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+.mihomo-protocols {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.mihomo-protocols strong {
+  margin-left: 10px;
+  font-family: var(--font-data);
+}
+.mihomo-ranking {
+  margin: 0;
+  padding: 8px 20px 16px;
+  list-style: none;
+}
+.mihomo-ranking li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--color-grid);
+  font-size: 12px;
+}
+.mihomo-ranking li:last-child {
+  border: 0;
+}
+.mihomo-ranking span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mihomo-ranking strong {
+  flex-shrink: 0;
+  font-family: var(--font-data);
+  font-weight: 500;
+}
+.mihomo-connection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 16px 20px 0;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.mihomo-connection-summary strong {
+  color: var(--color-text);
+  font-family: var(--font-data);
+  margin-left: 6px;
+}
+.mihomo-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 20px;
+}
+.mihomo-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 110px;
+}
+.mihomo-filter label {
+  font-size: 11px;
+  color: var(--color-secondary);
+}
+.mihomo-filter input,
+.mihomo-filter select {
+  min-height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+.mihomo-search {
+  flex: 1 1 240px;
+}
+.mihomo-search-control {
+  display: flex;
+  gap: 6px;
+}
+.mihomo-search-control input {
+  width: 100%;
+}
+.mihomo-search-control input::-webkit-search-cancel-button {
+  appearance: none;
+}
+.mihomo-table {
+  min-width: 620px;
+}
+.mihomo-table-viewport {
+  height: clamp(260px, 50dvh, 520px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.mihomo-table-help {
+  padding: 10px 20px;
+}
+.mihomo-table .mihomo-cell:first-child {
+  min-width: 160px;
+  max-width: 240px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.mihomo-table th:first-child,
+.mihomo-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
+  box-shadow: 1px 0 var(--color-border);
+  z-index: 1;
+}
+.mihomo-table .mihomo-cell {
+  white-space: nowrap;
+  font-size: 11px;
+}
+.mihomo-two-line {
+  min-width: 120px;
+  max-width: 240px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.mihomo-two-line small {
+  display: block;
+  margin-top: 5px;
+  color: var(--color-muted);
+  font-size: 10px;
+}
+.mihomo-cell:nth-child(5) {
+  white-space: normal;
+  min-width: 130px;
+  max-width: 220px;
+  overflow-wrap: anywhere;
+}
+.mihomo-detail-button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+.mihomo-connection-dialog {
+  max-height: calc(100dvh - 40px);
+}
+.mihomo-connection-dialog .dialog-body {
+  max-height: calc(100dvh - 190px);
+}
+.mihomo-connection-dialog .fact-row > span {
+  flex-shrink: 0;
+}
+.mihomo-usage-select {
+  min-width: 150px;
+}
+.mihomo-usage-range {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin: 0 0 16px;
+  line-height: 1.7;
+}
+.mihomo-usage-summary {
+  margin-bottom: 20px;
+}
+.mihomo-usage-detail {
+  margin-top: 20px;
+}
+@media (max-width: 680px) {
+  .mihomo-subnav a {
+    flex: 1;
+    text-align: center;
+  }
+  .mihomo-filters {
+    padding: 14px;
+  }
+  .mihomo-filters .mihomo-filter:not(.mihomo-search) {
+    flex: 1;
+  }
+  .mihomo-usage-select {
+    min-width: 130px;
+  }
 }
 .load-row {
   flex-wrap: wrap;

@@ -104,12 +104,23 @@ The 220px desktop sidebar narrows to an icon rail at 850px and a compact header 
 680px, where a horizontal view strip under the topbar replaces the hidden sidebar
 links. Navigation switches between the overview and hash-routed detail views
 (`#resources`, `#storage`, `#network`, `#containers`) instead of scrolling.
+The optional `#mihomo` route follows the same sidebar and mobile navigation rules.
+Its overview card and detail panel share source state and a separate traffic history.
+Mihomo adds sibling overview, connections and usage routes through an internal
+navigation strip; the main sidebar keeps one module entry. These pages never add
+polling requests on navigation. Connection and usage tables reuse the shared
+row-height pagination component in their own bounded scroll regions; surrounding
+charts, filters and the page retain natural document scrolling.
 Content uses natural document scrolling and a 1600px maximum width. Four
 resource cards become two columns on mobile. Monitoring widgets use two columns
 and then one; detail cards and volume cards follow the same two-to-one collapse.
 Chart frames have stable heights; the container table has its own
-horizontal overflow and a six-item page on the overview (twelve on the detail
-view). Loading and connectivity notices have
+horizontal overflow and fits as many rows as its available height allows. The
+overview stretches to its grid row, while only the detail table panel uses 70svh
+(430–800px). Both use measured row heights, including wrapped names, and only
+show pagination when the full filtered list cannot fit. Stable column widths
+keep wrapping consistent between pages; an oversized single row stays scrollable.
+Loading and connectivity notices have
 reserved geometry. Device identification and uptime stay visible on narrow screens.
 
 ## Elevation & Depth
@@ -143,6 +154,11 @@ Refresh and retry only request data, with refresh disabled before a source is se
 Pause uses a labeled Lucide icon button; refresh has icon and text.
 Primary emphasis is reserved for saving connection settings. Read-only monitoring
 has no destructive controls.
+Mihomo is an optional read-only source with its own proxy address and test button in
+the same settings dialog. Its Secret is never a browser field. Glances may be empty
+when mihomo is enabled. Both sources share refresh/pause controls while reporting
+independent freshness and failures; the source badge names every configured active
+source and never presents mihomo success as a Glances connection.
 
 ### Navigation and data display
 
@@ -151,8 +167,9 @@ category's detail view adds deeper telemetry from the same snapshot; detail
 views mount lazily on first navigation so charts size against a visible
 container. Disabled modules hide their route and fall back to the overview.
 Time ranges are pressed-state button
-groups. The container state filter, sortable detail headers, and page controls
-preserve semantic HTML.
+groups. The container state filter, sortable detail headers, and adaptive page
+controls preserve semantic HTML. Filtering and sorting reset to the first page;
+resizing keeps the current position and polling clamps pages after data changes.
 Charts provide textual current values; history represents actual in-page samples.
 
 ### Forms and overlays
@@ -192,6 +209,22 @@ one unit and switch to decimal steps, and every reading — including chart axes
 tooltips, and footnotes — follows it. CPU and memory use percent; load is
 dimensionless. API success is distinct from hardware health, and capacity alone
 never implies RAID health. Demo data is opt-in and persistently labeled.
+Mihomo rates are interval averages calculated from its own cumulative byte
+counters and actual elapsed time. First samples, failures, pauses and counter
+resets display `--` until a second valid sample. Its memory reading is bytes,
+not a percent. Unknown connection counts remain `--`; an empty list is a measured
+zero. Failed endpoints keep their last values with a visible warning.
+Connection inspection uses allowlisted, read-only metadata with search, protocol
+filtering, sortable native tables and a native detail dialog. Recent endings are
+observations made by this page, not upstream historical records. Truncated lists
+state their coverage explicitly. Local filters stay in the page and never put
+domains, IPs or process names into the URL or persistent browser storage.
+Usage statistics cover the whole current page session and retain all observed
+byte deltas when chart time buckets are coarsened. The overview's short history
+window never truncates session totals. First-seen counters establish baselines;
+missing samples and short unobserved connections are not backfilled. Usage is
+not persisted across a page refresh, close, demo/source switch or changed mihomo
+address. Demo sessions remain explicitly labeled.
 
 ## Do's and Don'ts
 

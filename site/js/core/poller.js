@@ -1,17 +1,19 @@
 // @ts-check
 
-/** @typedef {import("./types.js").Snapshot} Snapshot */
-
 /**
+ * @template T
  * @typedef {object} PollerOptions
  * @property {number} intervalMs
- * @property {(signal: AbortSignal) => Promise<Snapshot>} fetch
- * @property {(snapshot: Snapshot) => void} onData
+ * @property {(signal: AbortSignal) => Promise<T>} fetch
+ * @property {(snapshot: T) => void} onData
+ * @property {(snapshot: T) => boolean} hasData Caller-owned usable-metric check.
  * @property {(error: unknown) => void} onError
  * @property {(busy: boolean) => void} onBusy
  */
 
 // Scheduling after settlement prevents overlapping requests on a slow NAS.
+// Each source supplies its success rule; metadata alone must not reset backoff.
+/** @template T */
 export class Poller {
   /** @type {ReturnType<typeof setTimeout>|undefined} */
   timer;
@@ -21,7 +23,7 @@ export class Poller {
   active = false;
   failures = 0;
 
-  /** @param {PollerOptions} options */
+  /** @param {PollerOptions<T>} options */
   constructor(options) {
     this.options = options;
   }
@@ -48,11 +50,7 @@ export class Poller {
       const snapshot = await this.options.fetch(controller.signal);
       if (controller.signal.aborted) return;
       this.options.onData(snapshot);
-      this.failures = Object.keys(snapshot.data).some(
-        (key) => !["system", "uptime"].includes(key),
-      )
-        ? 0
-        : this.failures + 1;
+      this.failures = this.options.hasData(snapshot) ? 0 : this.failures + 1;
     } catch (error) {
       if (!controller.signal.aborted) {
         this.failures++;

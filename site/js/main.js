@@ -4,6 +4,7 @@
 /** @typedef {import("./core/types.js").HistoryPoint} HistoryPoint */
 /** @typedef {import("./core/types.js").Metrics} Metrics */
 /** @typedef {import("./core/types.js").Snapshot} Snapshot */
+/** @typedef {import("./core/types.js").MihomoSnapshot} MihomoSnapshot */
 /** @typedef {import("./core/types.js").ViewDefinition} ViewDefinition */
 /** @typedef {import("./core/types.js").WidgetContext} WidgetContext */
 /** @typedef {import("./core/types.js").WidgetDefinition} WidgetDefinition */
@@ -20,7 +21,14 @@ import { demoHistory, demoSnapshot } from "./core/demo.js";
 import { bytes, decimal, setByteUnits, time, uptime } from "./core/format.js";
 import { normalize } from "./core/metrics.js";
 import { Poller } from "./core/poller.js";
-import { $, el, icon, icons, setText } from "./ui/dom.js";
+import {
+  MihomoMonitor,
+  demoMihomoSnapshot,
+  fetchMihomoSnapshot,
+  hasMihomoData,
+} from "./core/mihomo.js";
+import { mihomoStatus } from "./ui/mihomo.js";
+import { $, el, icon, icons, setText, updateStatus } from "./ui/dom.js";
 import { requiredPlugins, widgets } from "./widgets/index.js";
 import { detailViews, viewMeta } from "./views/index.js";
 
@@ -30,8 +38,14 @@ let demo = new URL(location.href).searchParams.get("demo") === "1";
 let paused = false;
 let windowMinutes = 15;
 let currentView = "overview";
-/** @type {import("./core/poller.js").Poller|undefined} */
+/** @type {import("./core/poller.js").Poller<Snapshot>|undefined} */
 let poller;
+/** @type {import("./core/poller.js").Poller<MihomoSnapshot>|undefined} */
+let mihomoPoller;
+let mihomo = new MihomoMonitor(config);
+// A single refresh control reflects both independent in-flight requests.
+/** @type {Set<"glances"|"mihomo">} */
+const busySources = new Set();
 /** @type {Snapshot|undefined} */
 let snapshot;
 /** @type {Metrics|undefined} */
@@ -46,6 +60,8 @@ let configError = "";
 let storageWarning = "";
 /** @type {AbortController|undefined} */
 let testController;
+/** @type {AbortController|undefined} */
+let mihomoTestController;
 /** @type {HTMLElement|undefined} */
 let returnFocus;
 /** @type {Map<WidgetId, ReturnType<WidgetDefinition["mount"]>>} */
@@ -70,9 +86,37 @@ function notice(message, action = "", tone = "info") {
 }
 
 function renderConnection() {
-  const stale =
-    lastSuccess > 0 &&
-    Date.now() - lastSuccess > Math.max(15000, config.refreshSeconds * 3000);
+  const sources = [
+    ...(demo || config.api.url
+      ? [
+          {
+            name: "Glances",
+            connection,
+            lastSuccess,
+            error: connectionError,
+            errors: snapshot?.errors ?? {},
+          },
+        ]
+      : []),
+    ...(mihomoActive() ? [{ name: "mihomo", ...mihomo.state }] : []),
+  ];
+  const stale = sources.some(
+    (source) =>
+      source.lastSuccess > 0 &&
+      Date.now() - source.lastSuccess >
+        Math.max(15000, config.refreshSeconds * 3000),
+  );
+  const overall = !sources.length
+    ? "idle"
+    : sources.every((source) => source.connection === "online")
+      ? "online"
+      : sources.some((source) =>
+            ["online", "partial"].includes(source.connection),
+          )
+        ? "partial"
+        : sources.some((source) => source.connection === "loading")
+          ? "loading"
+          : "offline";
   const states = {
     idle: "尚未连接",
     loading: "正在连接",
@@ -80,31 +124,33 @@ function renderConnection() {
     partial: "部分数据不可用",
     offline: "连接中断",
   };
-  const text = paused
-    ? "已暂停更新"
-    : stale && connection !== "idle"
-      ? "数据已过期"
-      : states[connection];
+  const text = paused ? "已暂停更新" : stale ? "数据已过期" : states[overall];
   setText(
     "connection-text",
     demo ? (paused ? "演示已暂停" : "演示采样") : text,
   );
   $("connection-status", HTMLElement).className =
-    `status-label ${demo || paused ? "neutral" : connection === "online" && !stale ? "success" : "warning"}`;
+    `status-label ${demo || paused ? "neutral" : overall === "online" && !stale ? "success" : "warning"}`;
   $("device-dot", HTMLElement).className =
     `status-dot ${connection === "online" && !stale && !demo ? "success" : "neutral"}`;
   setText(
     "source-badge",
-    demo ? "演示数据" : config.api.url ? "GLANCES API" : "未连接",
+    demo
+      ? "演示数据"
+      : sources.length
+        ? `${sources.map((source) => source.name.toUpperCase()).join(" + ")} API`
+        : "未连接",
   );
   $("source-badge", HTMLElement).className =
     `source-badge ${demo ? "demo" : ""}`;
   setText("refresh-label", `每 ${config.refreshSeconds} 秒更新`);
+  const successes = sources
+    .map((source) => source.lastSuccess)
+    .filter((value) => value > 0);
+  const updated = successes.length ? Math.min(...successes) : 0;
   setText(
     "last-updated",
-    lastSuccess
-      ? `最后更新 ${time(lastSuccess)} · 上海时间`
-      : "尚未更新 · 上海时间",
+    updated ? `最后更新 ${time(updated)} · 上海时间` : "尚未更新 · 上海时间",
   );
   setText(
     "footer-status",
@@ -112,27 +158,43 @@ function renderConnection() {
       ? "演示采样"
       : paused
         ? "自动更新已暂停"
-        : connection === "online" && !stale
-          ? "Glances 已连接"
+        : overall === "online" && !stale
+          ? `${sources.map((source) => source.name).join(" 与 ")} 已连接`
           : text,
   );
+  // Freshness ticks update status text only, without repainting every chart.
+  for (const status of /** @type {NodeListOf<HTMLElement>} */ (
+    document.querySelectorAll("[data-mihomo-status]")
+  ))
+    updateStatus(
+      status,
+      mihomoStatus({ mihomo: mihomo.state, config, paused, demo }),
+    );
   if (configError)
     notice(
       `${configError} 请在导航栏的「监控设置」中检查连接配置。`,
       "",
       "warning",
     );
-  else if (!config.api.url && !demo)
-    notice("尚未连接 NAS，请在导航栏的「监控设置」中填写 Glances API 地址。");
-  else if (connection === "offline")
+  else if (!sources.length && !demo)
     notice(
-      `${connectionError}。${lastSuccess ? "显示最后一次采集结果。" : "请检查地址或网络后重试。"}`,
+      "尚未连接 NAS，请在导航栏的「监控设置」中填写 Glances API 地址，或启用 mihomo 监控。",
+    );
+  else if (overall === "offline")
+    notice(
+      `${sources.map((source) => `${source.name}：${source.error || "接口未提供监控数据"}`).join("；")}。${updated ? "显示最后一次采集结果。" : "请检查地址或网络后重试。"}`,
       "重试",
       "warning",
     );
-  else if (connection === "partial" && snapshot)
+  else if (overall === "partial")
     notice(
-      `部分指标无法读取：${Object.keys(snapshot.errors).join("、")}。`,
+      `部分指标无法读取：${sources
+        .filter((source) => source.connection !== "online")
+        .map(
+          (source) =>
+            `${source.name} ${Object.keys(source.errors).join("、") || source.error || "正在连接"}`,
+        )
+        .join("；")}。`,
       "重试",
       "warning",
     );
@@ -226,6 +288,9 @@ function renderAll() {
     history,
     config,
     windowMinutes,
+    mihomo: mihomo.state,
+    paused,
+    demo,
   };
   for (const widget of mounted.values()) widget.update(context);
   for (const view of viewInstances.values()) view.update(context);
@@ -248,9 +313,15 @@ function syncWindowButtons() {
  * @returns {boolean}
  */
 function viewEnabled(id) {
-  // Detail views depend on their widget's plugins; disabled modules fall back.
+  // Several mihomo pages belong to one optional module; disabling it hides all
+  // sibling routes while their navigation still highlights the parent module.
   return (
-    id === "overview" || config.widgets.includes(/** @type {WidgetId} */ (id))
+    id === "overview" ||
+    config.widgets.includes(
+      /** @type {WidgetId} */ (
+        detailViews.find((view) => view.id === id)?.moduleId ?? id
+      ),
+    )
   );
 }
 
@@ -271,11 +342,24 @@ function currentRoute() {
  */
 function showView(id, scroll = true) {
   if (!viewIds.has(id) || !viewEnabled(id)) id = "overview";
+  const focusFromMihomo =
+    document.activeElement instanceof HTMLElement &&
+    Boolean(
+      document.activeElement.closest(
+        ".mihomo-subnav, .mihomo-shortcuts, .mihomo-connection-dialog",
+      ),
+    );
   currentView = id;
   for (const section of /** @type {NodeListOf<HTMLElement>} */ (
     document.querySelectorAll(".view")
-  ))
+  )) {
+    // Browser Back can navigate while a view-owned dialog is open. Close it
+    // before hiding its owner so no invisible modal can keep the page inert.
+    if (section.dataset.view !== id)
+      for (const modal of section.querySelectorAll("dialog[open]"))
+        if (modal instanceof HTMLDialogElement) modal.close();
     section.hidden = section.dataset.view !== id;
+  }
   if (id !== "overview" && !viewInstances.has(id)) {
     const definition = detailViews.find((view) => view.id === id);
     const host = document.getElementById(`view-${id}`);
@@ -293,13 +377,23 @@ function showView(id, scroll = true) {
   setText("breadcrumb-view", meta.title);
   document.title = `${config.name} · ${meta.title}${demo ? " · 演示" : ""}`;
   // Sidebar and mobile strip carry the same routes; both reflect the state.
+  const navigationId =
+    detailViews.find((view) => view.id === id)?.moduleId ?? id;
   for (const link of document.querySelectorAll(".nav-links a, .mobile-nav a")) {
-    const active = link.getAttribute("href") === `#${id}`;
+    const active = link.getAttribute("href") === `#${navigationId}`;
     link.classList.toggle("active", active);
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
   renderAll();
+  if (focusFromMihomo) {
+    const section = document.getElementById(`view-${id}`);
+    const activeLink = section?.querySelector(
+      '.mihomo-subnav a[aria-current="page"]',
+    );
+    if (activeLink instanceof HTMLElement)
+      activeLink.focus({ preventScroll: true });
+  }
   if (scroll) window.scrollTo(0, 0);
   icons();
 }
@@ -348,6 +442,13 @@ function receive(next) {
   if (!useful) {
     connection = "offline";
     connectionError = Object.values(next.errors)[0] || "接口未提供监控数据";
+    // Preserve values but propagate source errors into each Glances module.
+    snapshot = {
+      data: snapshot?.data ?? {},
+      errors: next.errors,
+      collectedAt: lastSuccess,
+    };
+    renderAll();
     renderConnection();
     return;
   }
@@ -384,20 +485,46 @@ function receive(next) {
   renderConnection();
 }
 
-// Explicit connections reset samples so data from different sources cannot mix.
-function connect() {
-  // Formatting reads this module state; apply it before anything re-renders.
-  setByteUnits(config.unit, config.unitBase);
-  snapshot = undefined;
-  metrics = undefined;
+/** Reset only the NAS source, including its module-local buffers. */
+function resetGlances() {
+  snapshot = { data: {}, errors: {}, collectedAt: 0 };
+  metrics = normalize(snapshot, config);
   lastSuccess = 0;
   history = demo ? demoHistory() : [];
+  connection = config.api.url || demo ? "loading" : "idle";
+  connectionError = "";
+}
+
+function mihomoActive() {
+  return (
+    config.widgets.includes("mihomo") && (demo || Boolean(config.mihomo.url))
+  );
+}
+
+/** A changed controller never shares counters or samples with its predecessor. */
+function resetMihomo() {
+  mihomo = new MihomoMonitor(config);
+  mihomo.state.connection = mihomoActive() ? "loading" : "idle";
+  if (demo && mihomoActive()) {
+    const now = Date.now();
+    for (let index = 180; index >= 0; index--)
+      mihomo.receive(
+        demoMihomoSnapshot(now - index * 5000),
+        now - index * 5000,
+      );
+  }
+}
+
+// Explicit connections reset samples so data from different sources cannot mix.
+function connect() {
+  setByteUnits(config.unit, config.unitBase);
+  resetGlances();
+  resetMihomo();
   // Views keep local sample buffers (per-interface history, sort, paging);
   // destroying them here keeps reconnects from mixing data sources.
   viewInstances.forEach((view) => view.destroy());
   viewInstances.clear();
-  connection = config.api.url || demo ? "loading" : "idle";
-  renderOverview(normalize({ data: {}, errors: {}, collectedAt: 0 }, config));
+  renderOverview(/** @type {Metrics} */ (metrics));
   mountWidgets();
   renderHeader();
   renderConnection();
@@ -414,39 +541,93 @@ function renderHeader() {
   document.title = `${config.name} · ${viewMeta(currentView).title}${demo ? " · 演示" : ""}`;
 }
 
+/** One busy indicator combines independent source requests without queuing them. */
+function refreshAvailability() {
+  const busy = busySources.size > 0;
+  $("refresh-button", HTMLButtonElement).disabled =
+    busy || (!demo && !config.api.url && !mihomoActive());
+  $("refresh-button", HTMLElement).classList.toggle("is-busy", busy);
+  $("refresh-button", HTMLElement).setAttribute("aria-busy", String(busy));
+}
+
 /**
- * (Re)build the poller from the current configuration. Samples already on
- * screen survive this, so changing the interval does not blank a paused page.
+ * Rebuild only affected source pollers; preserve samples on a paused dashboard.
+ * @param {boolean} [glances=true]
+ * @param {boolean} [proxy=true]
  */
-function startPoller() {
-  poller?.stop();
-  poller = undefined;
-  // Refresh remains a data action; an unconfigured source is handled in settings.
-  $("refresh-button", HTMLButtonElement).disabled = !demo && !config.api.url;
-  $("refresh-button", HTMLElement).classList.remove("is-busy");
-  $("refresh-button", HTMLElement).setAttribute("aria-busy", "false");
-  if (!demo && !config.api.url) return;
-  const instance = new Poller({
-    intervalMs: config.refreshSeconds * 1000,
-    fetch: (signal) =>
-      demo
-        ? Promise.resolve(demoSnapshot())
-        : fetchSnapshot(config, requiredPlugins(config.widgets), signal),
-    onData: receive,
-    onError(error) {
-      connection = "offline";
-      connectionError = requestError(error);
-      renderConnection();
-    },
-    onBusy(busy) {
-      if (poller !== instance) return;
-      $("refresh-button", HTMLButtonElement).disabled = busy;
-      $("refresh-button", HTMLElement).classList.toggle("is-busy", busy);
-      $("refresh-button", HTMLElement).setAttribute("aria-busy", String(busy));
-    },
-  });
-  poller = instance;
-  if (!paused && !document.hidden) instance.start();
+function startPoller(glances = true, proxy = true) {
+  if (glances) {
+    poller?.stop();
+    poller = undefined;
+    busySources.delete("glances");
+  }
+  if (proxy) {
+    mihomoPoller?.stop();
+    mihomoPoller = undefined;
+    busySources.delete("mihomo");
+  }
+  refreshAvailability();
+  if (glances && (demo || config.api.url)) {
+    const instance = new Poller({
+      intervalMs: config.refreshSeconds * 1000,
+      fetch: (signal) =>
+        demo
+          ? Promise.resolve(demoSnapshot())
+          : fetchSnapshot(config, requiredPlugins(config.widgets), signal),
+      onData: receive,
+      hasData: (next) =>
+        Object.keys(next.data).some(
+          (key) => !["system", "uptime"].includes(key),
+        ),
+      onError(error) {
+        // Whole-request failures still mark only this source's modules stale.
+        const message = requestError(error);
+        receive({
+          data: {},
+          errors: Object.fromEntries(
+            requiredPlugins(config.widgets).map((plugin) => [plugin, message]),
+          ),
+          collectedAt: Date.now(),
+        });
+      },
+      onBusy(busy) {
+        if (poller !== instance) return;
+        if (busy) busySources.add("glances");
+        else busySources.delete("glances");
+        refreshAvailability();
+      },
+    });
+    poller = instance;
+    if (!paused && !document.hidden) instance.start();
+  }
+  if (proxy && mihomoActive()) {
+    const instance = new Poller({
+      intervalMs: config.refreshSeconds * 1000,
+      fetch: (signal) =>
+        demo
+          ? Promise.resolve(demoMihomoSnapshot())
+          : fetchMihomoSnapshot(config, signal),
+      hasData: hasMihomoData,
+      onData(next) {
+        mihomo.receive(next, demo ? next.collectedAt : performance.now());
+        renderAll();
+        renderConnection();
+      },
+      onError(error) {
+        mihomo.fail(requestError(error));
+        renderAll();
+        renderConnection();
+      },
+      onBusy(busy) {
+        if (mihomoPoller !== instance) return;
+        if (busy) busySources.add("mihomo");
+        else busySources.delete("mihomo");
+        refreshAvailability();
+      },
+    });
+    mihomoPoller = instance;
+    if (!paused && !document.hidden) instance.start();
+  }
 }
 
 /** Repaint the dashboard from the snapshot already on screen. */
@@ -503,6 +684,25 @@ function clearTest() {
   $("test-button", HTMLElement).setAttribute("aria-busy", "false");
 }
 
+/** Cancel stale test results when a draft changes or the dialog closes. */
+function clearMihomoTest() {
+  mihomoTestController?.abort();
+  mihomoTestController = undefined;
+  setText("mihomo-test-result", "");
+  $("mihomo-test-button", HTMLElement).classList.remove("is-busy");
+  $("mihomo-test-button", HTMLElement).setAttribute("aria-busy", "false");
+  updateMihomoSettings();
+}
+
+function updateMihomoSettings() {
+  const enabled = Boolean(
+    document.querySelector('input[name="widget"][value="mihomo"]:checked'),
+  );
+  $("setting-mihomo-url", HTMLInputElement).disabled = !enabled;
+  $("mihomo-test-button", HTMLButtonElement).disabled =
+    !enabled || $("setting-demo", HTMLInputElement).checked;
+}
+
 function updateApiLabel() {
   const proxy = $("setting-mode", HTMLSelectElement).value === "proxy";
   setText("api-field-label", proxy ? "同源代理地址" : "Glances API 地址");
@@ -544,11 +744,14 @@ function openSettings(firstRun = false) {
     );
   interval.value = String(config.refreshSeconds);
   $("setting-url", HTMLInputElement).value = config.api.url;
+  $("setting-mihomo-url", HTMLInputElement).value = config.mihomo.url;
   $("setting-demo", HTMLInputElement).checked = demo;
   $("setting-url", HTMLElement).removeAttribute("aria-invalid");
   setText("api-error", "");
+  setText("mihomo-error", "");
+  $("setting-mihomo-url", HTMLElement).removeAttribute("aria-invalid");
   setText("save-result", "");
-  setText("settings-title", firstRun ? "连接你的 NAS" : "监控设置");
+  setText("settings-title", firstRun ? "连接监控数据源" : "监控设置");
   $("module-options", HTMLElement).replaceChildren(
     ...widgets.map((widget) => {
       const input = el("input", {
@@ -568,6 +771,7 @@ function openSettings(firstRun = false) {
   );
   updateApiLabel();
   clearTest();
+  clearMihomoTest();
   icons();
   dialog.showModal();
   if (firstRun) $("setting-url", HTMLInputElement).focus();
@@ -583,6 +787,9 @@ function draft() {
         $("setting-mode", HTMLSelectElement).value
       ),
       url: normalizeApiAddress($("setting-url", HTMLInputElement).value),
+    },
+    mihomo: {
+      url: normalizeApiAddress($("setting-mihomo-url", HTMLInputElement).value),
     },
     refreshSeconds: Number($("setting-interval", HTMLSelectElement).value),
     unit: /** @type {Config["unit"]} */ (
@@ -607,14 +814,36 @@ function draft() {
  * @returns {boolean}
  */
 function validateDraft(next) {
-  const error = validateApi(next.api, location.href);
+  // Glances may be empty for mihomo-only use, including an explicit action to
+  // disable that last source. First-run saves still require a valid connection.
+  const enabled = next.widgets.includes("mihomo");
+  const error =
+    next.api.url || (!enabled && !config.widgets.includes("mihomo"))
+      ? validateApi(next.api, location.href)
+      : null;
   setText("api-error", error || "");
   $("setting-url", HTMLElement).setAttribute(
     "aria-invalid",
     String(Boolean(error)),
   );
+  const proxyError = enabled ? validateMihomoDraft(next) : false;
   if (error) $("setting-url", HTMLInputElement).focus();
-  return !error;
+  return !error && !proxyError;
+}
+
+/** @param {Config} next @returns {boolean} True when invalid. */
+function validateMihomoDraft(next) {
+  const error = validateApi(
+    { mode: "proxy", url: next.mihomo.url },
+    location.href,
+  );
+  setText("mihomo-error", error || "");
+  $("setting-mihomo-url", HTMLElement).setAttribute(
+    "aria-invalid",
+    String(Boolean(error)),
+  );
+  if (error) $("setting-mihomo-url", HTMLInputElement).focus();
+  return Boolean(error);
 }
 
 // Keep one manual entry across overview, detail views, and compact navigation.
@@ -625,6 +854,7 @@ for (const id of ["settings-close", "settings-cancel"])
   $(id, HTMLElement).addEventListener("click", () => dialog.close());
 dialog.addEventListener("close", () => {
   clearTest();
+  clearMihomoTest();
   returnFocus?.focus();
 });
 $("setting-mode", HTMLSelectElement).addEventListener("change", () => {
@@ -643,10 +873,29 @@ $("setting-url", HTMLElement).addEventListener("input", () => {
   setText("api-error", "");
   $("setting-url", HTMLElement).removeAttribute("aria-invalid");
 });
-$("setting-demo", HTMLInputElement).addEventListener("change", clearTest);
+$("setting-demo", HTMLInputElement).addEventListener("change", () => {
+  clearTest();
+  clearMihomoTest();
+});
+$("module-options", HTMLElement).addEventListener("change", clearMihomoTest);
+$("setting-mihomo-url", HTMLElement).addEventListener("input", () => {
+  clearMihomoTest();
+  setText("mihomo-error", "");
+  $("setting-mihomo-url", HTMLElement).removeAttribute("aria-invalid");
+});
 $("test-button", HTMLButtonElement).addEventListener("click", async () => {
   const next = draft();
-  if (!validateDraft(next)) return;
+  // This button tests Glances only, even when mihomo is the active source.
+  const error = validateApi(next.api, location.href);
+  setText("api-error", error || "");
+  $("setting-url", HTMLElement).setAttribute(
+    "aria-invalid",
+    String(Boolean(error)),
+  );
+  if (error) {
+    $("setting-url", HTMLInputElement).focus();
+    return;
+  }
   clearTest();
   const controller = new AbortController();
   testController = controller;
@@ -676,6 +925,51 @@ $("test-button", HTMLButtonElement).addEventListener("click", async () => {
     }
   }
 });
+
+$("mihomo-test-button", HTMLButtonElement).addEventListener(
+  "click",
+  async () => {
+    const next = draft();
+    if (validateMihomoDraft(next)) return;
+    clearMihomoTest();
+    const controller = new AbortController();
+    mihomoTestController = controller;
+    const button = $("mihomo-test-button", HTMLButtonElement);
+    button.disabled = true;
+    button.classList.add("is-busy");
+    button.setAttribute("aria-busy", "true");
+    setText("mihomo-test-result", "正在测试连接…");
+    try {
+      const result = await fetchMihomoSnapshot(next, controller.signal);
+      if (controller.signal.aborted) return;
+      if (!hasMihomoData(result))
+        throw new Error(
+          Object.values(result.errors)[0] || "mihomo 未提供监控数据",
+        );
+      const partial = Object.keys(result.errors).length > 0;
+      $("mihomo-test-result", HTMLElement).className = partial
+        ? "warning-text"
+        : "success-text";
+      setText(
+        "mihomo-test-result",
+        partial
+          ? `连接成功，部分数据不可用：${Object.values(result.errors).join("；")}`
+          : "连接成功，mihomo 监控数据可读取",
+      );
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      $("mihomo-test-result", HTMLElement).className = "warning-text";
+      setText("mihomo-test-result", requestError(error));
+    } finally {
+      if (mihomoTestController === controller) {
+        mihomoTestController = undefined;
+        updateMihomoSettings();
+        button.classList.remove("is-busy");
+        button.setAttribute("aria-busy", "false");
+      }
+    }
+  },
+);
 $("settings-form", HTMLElement).addEventListener("submit", (event) => {
   event.preventDefault();
   // Enter used to commit an IME composition must not save the connection form.
@@ -687,10 +981,12 @@ $("settings-form", HTMLElement).addEventListener("submit", (event) => {
   // Only a different data source invalidates the samples on screen. Display
   // preferences and module choices repaint in place instead: reconnecting here
   // would blank a paused page and wait for a poll that never starts.
-  const sourceChanged =
-    nextDemo !== demo ||
-    next.api.mode !== config.api.mode ||
-    next.api.url !== config.api.url;
+  const demoChanged = nextDemo !== demo;
+  const glancesChanged =
+    next.api.mode !== config.api.mode || next.api.url !== config.api.url;
+  const mihomoChanged = next.mihomo.url !== config.mihomo.url;
+  const mihomoEnabledChanged =
+    next.widgets.includes("mihomo") !== config.widgets.includes("mihomo");
   const modulesChanged = next.widgets.join() !== config.widgets.join();
   const intervalChanged = next.refreshSeconds !== config.refreshSeconds;
   config = next;
@@ -704,19 +1000,45 @@ $("settings-form", HTMLElement).addEventListener("submit", (event) => {
     : "浏览器未允许保存设置，当前页面仍可使用。";
   configError = "";
   dialog.close();
-  if (sourceChanged) {
+  if (demoChanged) {
     connect();
     return;
   }
   setByteUnits(config.unit, config.unitBase);
-  if (modulesChanged) {
-    viewInstances.forEach((view) => view.destroy());
-    viewInstances.clear();
-    mountWidgets();
+  if (glancesChanged) resetGlances();
+  if (mihomoChanged) resetMihomo();
+  else if (mihomoEnabledChanged) {
+    // Module toggles preserve samples just like other display preferences, but
+    // never average across the interval when the source was disabled.
+    mihomo.resetBaseline();
+    if (mihomoActive() && !mihomo.state.lastSuccess) {
+      if (demo) resetMihomo();
+      else mihomo.state.connection = "loading";
+    }
+  }
+  mihomo.config = config;
+  if (modulesChanged || glancesChanged || mihomoChanged) {
+    for (const [id, view] of viewInstances) {
+      const owner =
+        detailViews.find((definition) => definition.id === id)?.moduleId ?? id;
+      if (
+        modulesChanged ||
+        (glancesChanged && owner !== "mihomo") ||
+        (mihomoChanged && owner === "mihomo")
+      ) {
+        view.destroy();
+        viewInstances.delete(id);
+      }
+    }
+    if (modulesChanged || glancesChanged) mountWidgets();
     // Revalidate the route: a just-disabled module must fall back to overview.
     showView(currentRoute(), false);
   }
-  if (intervalChanged) startPoller();
+  if (intervalChanged || modulesChanged || glancesChanged || mihomoChanged)
+    startPoller(
+      intervalChanged || modulesChanged || glancesChanged,
+      intervalChanged || mihomoChanged || mihomoEnabledChanged,
+    );
   repaint();
 });
 for (const input of /** @type {NodeListOf<HTMLInputElement>} */ (
@@ -730,10 +1052,10 @@ for (const input of /** @type {NodeListOf<HTMLInputElement>} */ (
   });
 }
 $("refresh-button", HTMLButtonElement).addEventListener("click", () => {
-  void poller?.refresh();
+  refreshSources();
 });
 $("notice-action", HTMLElement).addEventListener("click", () => {
-  void poller?.refresh();
+  refreshSources();
 });
 $("pause-button", HTMLElement).addEventListener("click", () => {
   paused = !paused;
@@ -745,8 +1067,8 @@ $("pause-button", HTMLElement).addEventListener("click", () => {
     icon(paused ? "play" : "pause"),
   );
   icons();
-  if (paused) poller?.stop();
-  else if (!document.hidden) poller?.start();
+  if (paused) stopSources();
+  else if (!document.hidden) resumeSources();
   renderConnection();
 });
 // Delegated so trend window buttons inside lazily mounted views also work.
@@ -761,14 +1083,34 @@ document.addEventListener("click", (event) => {
 // Navigation is hash-routed; views switch instead of scrolling to widgets.
 window.addEventListener("hashchange", () => showView(currentRoute()));
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) poller?.stop();
-  else if (!paused) poller?.start();
+  if (document.hidden) stopSources();
+  else if (!paused) resumeSources();
   renderConnection();
 });
 window.addEventListener("online", () => {
-  if (!paused && !document.hidden) void poller?.refresh();
+  mihomo.resetBaseline();
+  if (!paused && !document.hidden) refreshSources();
 });
-window.addEventListener("pagehide", () => poller?.stop());
+window.addEventListener("pagehide", stopSources);
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted && !paused && !document.hidden) resumeSources();
+});
+
+// All lifecycle controls cover both sources; a pause never mixes elapsed rates.
+function refreshSources() {
+  void poller?.refresh();
+  void mihomoPoller?.refresh();
+}
+function stopSources() {
+  poller?.stop();
+  mihomoPoller?.stop();
+  mihomo.resetBaseline();
+}
+function resumeSources() {
+  mihomo.resetBaseline();
+  poller?.start();
+  mihomoPoller?.start();
+}
 setInterval(renderConnection, 1000);
 
 async function init() {
@@ -780,7 +1122,7 @@ async function init() {
   }
   connect();
   void loadBuild();
-  if (!demo && !config.api.url) openSettings(true);
+  if (!demo && !config.api.url && !mihomoActive()) openSettings(true);
 }
 
 void init();

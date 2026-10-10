@@ -7,14 +7,17 @@ import { resourcesWidget } from "./resources.js";
 import { storageWidget } from "./storage.js";
 import { networkWidget } from "./network.js";
 import { containersWidget } from "./containers.js";
+import { mihomoWidget } from "./mihomo.js";
 
-// Register future widgets here; polling and settings derive from this registry.
+// Settings derive from this registry; the optional mihomo source declares no
+// Glances plugins and is scheduled independently by the application.
 /** @type {WidgetDefinition[]} */
 export const widgets = [
   resourcesWidget,
   networkWidget,
   storageWidget,
   containersWidget,
+  mihomoWidget,
 ];
 
 /**

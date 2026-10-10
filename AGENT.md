@@ -19,6 +19,17 @@ on first visit; no private NAS address or credentials ship as defaults.
 - `site/js/ui/` owns safe DOM rendering and Chart.js integration; icons come from
   `site/js/ui/icons.js`.
 - Browser preferences are versioned in localStorage. Credentials stay server-side.
+- Optional mihomo monitoring uses a separate same-origin `api/mihomo.php` proxy,
+  private sibling `config/mihomo.php` (or MIHOMO_CONFIG / MIHOMO_API_URL / MIHOMO_SECRET),
+  and independent source state. It can run without Glances. Its widget defaults off.
+  Only GET /connections, /memory, /version are allowed. The three module routes
+  (#mihomo, #mihomo-connections, #mihomo-usage) share snapshots. Connection output
+  contains summary metrics plus at most 500 allowlisted detail rows; unknown
+  metadata, inbound-user fields and credentials never cross the proxy. Preserve
+  the complete count and a truncation flag; older summary-only proxies remain usable.
+  /memory is NDJSON: discard its synthetic
+  first frame, collect the second, then explicitly terminate cURL reading. Treat
+  that known completed-sample write abort differently from genuine transport errors.
 - Direct mode connects to a user-entered Glances API. Optional `site/api/index.php`
   provides a Web Station PHP/cURL proxy with a fixed upstream and read-only allowlist.
 - `config/glances.php` is private and excluded from Git and the public web root.
@@ -53,6 +64,20 @@ on first visit; no private NAS address or credentials ship as defaults.
   Container health states (`healthy`, `unhealthy`, `starting`) also count as running.
 - History is bounded and exists only while this page is open. Demo history is fake
   and explicitly labeled. Hidden tabs suspend polling; requests never overlap.
+- Mihomo byte rates use counter deltas divided by actual monotonic elapsed seconds.
+  First samples, failures, counter resets, pauses and hidden-tab resumes establish
+  a new baseline. Its traffic history must never include NAS interface readings.
+  Poller is generic: each source supplies a usable-data predicate; version metadata
+  alone cannot reset backoff. Refresh/pause/visibility controls cover both sources,
+  and changing an address clears only that source's samples.
+- Mihomo usage covers all measured deltas since this page's first valid connection
+  observation, independently of the short overview history window. First observations
+  establish baselines, so pre-existing lifetime bytes are not imported. Aggregate
+  in memory by metadata/time bucket, coarsening chart buckets without dropping any
+  recorded bytes. Never persist connection metadata or usage in browser storage.
+  Pauses/failures can leave observation gaps; do not invent unobserved traffic or
+  infer closed connections from failed/truncated lists. Keep at most 200 observed
+  ended connections, and remove reappearing IDs from that list.
 - Icon hydration initializes only new placeholders; existing SVGs survive refreshes.
 - The Chart.js UMD bundle registers its own controllers and plugins.
 - Local preview checks both decoded paths and symlink targets against `site/`.
@@ -76,6 +101,9 @@ partial responses, settings, keyboard, empty data, and mobile layout. PHP syntax
 parsed by tests; verify the PHP/cURL runtime in Web Station before production use.
 Regression coverage includes stable icon nodes, class deduplication, sibling-path
 traversal, and symlinks outside the web root.
+Run `npm run test:php` for disposable PHP 8.3/cURL containers against a mock mihomo
+upstream. This exercises actual proxy auth, fixed paths, private/reserved-IP proxy
+bypass, response limits, stream cancellation, timeouts and per-endpoint failures.
 Run `npm run test:docker` for real-image integration tests using temporary Git
 repositories and bind mounts; these verify env configuration, clone/update, host
 ordinary-directory publishing, deleted-file cleanup, failure preservation, and

@@ -257,9 +257,8 @@ test("module settings and filters work with keyboard and reduced motion", async 
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?demo=1");
-  await expect(page.locator("#widget-containers")).toContainText(
-    "backup-worker",
-  );
+  // The last container may be on another page until the state filter is applied.
+  await expect(page.locator("#widget-containers")).toContainText("glances");
   await page.getByLabel("筛选容器状态").selectOption("stopped");
   await expect(page.locator("#widget-containers tbody tr")).toHaveCount(1);
   await expect(page.locator("#widget-containers")).toContainText(
