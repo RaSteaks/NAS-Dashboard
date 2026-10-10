@@ -159,6 +159,13 @@ the same settings dialog. Its Secret is never a browser field. Glances may be em
 when mihomo is enabled. Both sources share refresh/pause controls while reporting
 independent freshness and failures; the source badge names every configured active
 source and never presents mihomo success as a Glances connection.
+Mihomo targets one read per second while the document is visible, including the
+time spent waiting for the proxy. Glances retains its configurable interval after
+each completed read. Settings and the refresh label name the two cadences
+explicitly; changing the Glances interval does not reconnect mihomo. Slow reads
+never overlap, failures back off, and pause/background/close stop both sources.
+Live mihomo updates repaint only its own widgets and views. A pending mihomo read
+does not lock manual Glances refresh when both sources are configured.
 
 ### Navigation and data display
 

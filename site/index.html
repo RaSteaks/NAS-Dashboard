@@ -363,7 +363,8 @@
               </select>
             </div>
             <div class="form-field">
-              <label for="setting-interval">更新间隔</label
+              <!-- Glances owns this interval; mihomo reads use an independent live cadence. -->
+              <label for="setting-interval">Glances 更新间隔</label
               ><select id="setting-interval">
                 <option value="5">5 秒</option>
                 <option value="10">10 秒</option>
@@ -433,7 +434,8 @@
               spellcheck="false"
             />
             <span id="mihomo-help" class="field-hint"
-              >启用 mihomo 监控后填写；内核地址和 Secret 仅在服务端配置。</span
+              >启用后在页面前台按秒读取；内核地址和 Secret
+              仅在服务端配置。</span
             >
             <span id="mihomo-error" class="field-error" role="status"></span>
           </div>

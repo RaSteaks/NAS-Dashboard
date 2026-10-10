@@ -50,7 +50,7 @@
  * @property {string} subtitle
  * @property {ApiConfig} api
  * @property {MihomoConfig} mihomo
- * @property {number} refreshSeconds
+ * @property {number} refreshSeconds Glances interval; mihomo owns its one-second target cadence.
  * @property {number} timeoutSeconds
  * @property {number} historyMinutes
  * @property {string} volumePattern

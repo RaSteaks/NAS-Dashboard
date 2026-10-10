@@ -138,6 +138,21 @@ describe("mihomo configuration and transport", () => {
 });
 
 describe("mihomo rate samples", () => {
+  it("does not extend its sample window when Glances has a long interval", () => {
+    const monitor = new MihomoMonitor({ ...defaults, refreshSeconds: 60 });
+    monitor.receive(sample(100, 200), 0);
+    monitor.receive(sample(1000, 2000, 116000), 16000);
+    // Live-source gaps remain unknown even while Glances waits another minute.
+    expect(monitor.state.metrics.down).toBeNull();
+    expect(monitor.state.history.at(-2)).toMatchObject({
+      timestamp: 115999,
+      rx: null,
+      tx: null,
+    });
+    monitor.receive(sample(1100, 2200, 117000), 17000);
+    expect(monitor.state.metrics.down).toBe(200);
+  });
+
   it("uses actual elapsed seconds and keeps first or unknown readings empty", () => {
     const monitor = new MihomoMonitor(defaults);
     monitor.receive(sample(100, 200), 1000);

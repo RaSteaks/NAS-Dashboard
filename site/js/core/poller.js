@@ -4,6 +4,7 @@
  * @template T
  * @typedef {object} PollerOptions
  * @property {number} intervalMs
+ * @property {"settled"|"start"} [cadence] Default waits after settlement; start targets start-to-start timing.
  * @property {(signal: AbortSignal) => Promise<T>} fetch
  * @property {(snapshot: T) => void} onData
  * @property {(snapshot: T) => boolean} hasData Caller-owned usable-metric check.
@@ -43,6 +44,7 @@ export class Poller {
     if (this.running) return;
     clearTimeout(this.timer);
     this.running = true;
+    const startedAt = performance.now();
     const controller = new AbortController();
     this.controller = controller;
     this.options.onBusy(true);
@@ -59,14 +61,18 @@ export class Poller {
     } finally {
       this.running = false;
       this.options.onBusy(false);
-      if (this.active)
-        this.timer = setTimeout(
-          () => void this.refresh(),
-          Math.min(
-            60000,
-            this.options.intervalMs * 2 ** Math.min(this.failures, 3),
-          ),
+      if (this.active) {
+        let delay = Math.min(
+          60000,
+          this.options.intervalMs * 2 ** Math.min(this.failures, 3),
         );
+        // Live reads include request/render time in their cadence. Slow reads
+        // continue after settlement without overlap; failures still back off
+        // from completion, even when the failed request took a long time.
+        if (this.options.cadence === "start" && this.failures === 0)
+          delay = Math.max(0, delay - (performance.now() - startedAt));
+        this.timer = setTimeout(() => void this.refresh(), delay);
+      }
     }
   }
 }

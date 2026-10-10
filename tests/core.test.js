@@ -356,6 +356,110 @@ describe("API transport", () => {
 });
 
 describe("polling lifecycle", () => {
+  it("targets a live cadence while settled polling keeps its existing interval", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const fetcher = () =>
+      vi.fn(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return snapshot({ cpu: { total: 1 } });
+      });
+    const liveFetch = fetcher();
+    const intervalFetch = fetcher();
+    const callbacks = {
+      onData: vi.fn(),
+      hasData: () => true,
+      onError: vi.fn(),
+      onBusy: vi.fn(),
+    };
+    const live = new Poller({
+      ...callbacks,
+      intervalMs: 1000,
+      cadence: "start",
+      fetch: liveFetch,
+    });
+    const interval = new Poller({
+      ...callbacks,
+      intervalMs: 5000,
+      fetch: intervalFetch,
+    });
+    live.start();
+    interval.start();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(liveFetch).toHaveBeenCalledTimes(2);
+    expect(intervalFetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(liveFetch).toHaveBeenCalledTimes(6);
+    expect(intervalFetch).toHaveBeenCalledTimes(1);
+    // Glances still waits its full interval after the 400 ms request completes.
+    await vi.advanceTimersByTimeAsync(400);
+    expect(intervalFetch).toHaveBeenCalledTimes(2);
+    live.stop();
+    interval.stop();
+    await vi.advanceTimersByTimeAsync(400);
+  });
+
+  it("continues slow live reads without overlap and ignores a cancelled result", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    let active = 0;
+    let peak = 0;
+    const fetcher = vi.fn(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      active--;
+      return snapshot({ cpu: { total: 1 } });
+    });
+    const onData = vi.fn();
+    const poller = new Poller({
+      intervalMs: 1000,
+      cadence: "start",
+      fetch: fetcher,
+      hasData: () => true,
+      onData,
+      onError: vi.fn(),
+      onBusy: vi.fn(),
+    });
+    poller.start();
+    await vi.advanceTimersByTimeAsync(1499);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(peak).toBe(1);
+    poller.stop();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(onData).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("backs off live reads from settlement when no usable metric arrives", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const fetcher = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return snapshot({ system: {} });
+      })
+      .mockResolvedValue(snapshot({ cpu: { total: 1 } }));
+    const poller = new Poller({
+      intervalMs: 1000,
+      cadence: "start",
+      fetch: fetcher,
+      hasData: (next) => Boolean(next.data.cpu),
+      onData: vi.fn(),
+      onError: vi.fn(),
+      onBusy: vi.fn(),
+    });
+    poller.start();
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    poller.stop();
+  });
+
   it("never overlaps requests and aborts on stop", async () => {
     vi.useFakeTimers();
     /** @type {AbortSignal|undefined} */

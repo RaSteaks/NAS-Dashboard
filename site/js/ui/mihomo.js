@@ -2,16 +2,16 @@
 
 /** @typedef {import("../core/types.js").WidgetContext} WidgetContext */
 import { bytes, time } from "../core/format.js";
+import { mihomoStaleMs } from "../core/mihomo.js";
 import { lineChart } from "./chart.js";
 import { el, icon, panelHeading, updateStatus } from "./dom.js";
 
-/** @param {Pick<WidgetContext, "mihomo"|"paused"|"demo"|"config">} context */
+/** @param {Pick<WidgetContext, "mihomo"|"paused"|"demo">} context */
 export function mihomoStatus(context) {
-  const { mihomo, paused, demo, config } = context;
+  const { mihomo, paused, demo } = context;
+  // A slower Glances interval must not hide a stale live-source reading.
   const stale =
-    mihomo.lastSuccess > 0 &&
-    Date.now() - mihomo.lastSuccess >
-      Math.max(15000, config.refreshSeconds * 3000);
+    mihomo.lastSuccess > 0 && Date.now() - mihomo.lastSuccess > mihomoStaleMs;
   if (paused)
     return { text: demo ? "演示已暂停" : "已暂停更新", tone: "neutral" };
   if (demo) return { text: "演示数据", tone: "neutral" };
@@ -138,7 +138,7 @@ export function mountMihomoPanel(element, detail = false) {
         ([key, error]) => `${key}：${error}`,
       );
       footnote.textContent = [
-        "区间平均速率 · 累计流量由内核统计，重启或重置后重新累计",
+        "每秒读取，网络较慢时自动延后 · 区间平均速率 · 累计流量由内核统计，重启或重置后重新累计",
         demo ? "演示数据" : freshness,
         ...errors,
         !config.mihomo.url

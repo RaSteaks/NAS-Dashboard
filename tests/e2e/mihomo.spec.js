@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { defaults } from "../../site/js/core/config.js";
 import { demoSnapshot } from "../../site/js/core/demo.js";
+import { bytes } from "../../site/js/core/format.js";
 
 /** @typedef {import("@playwright/test").Page} Page */
 
@@ -92,8 +93,13 @@ async function mockSources(page) {
   return control;
 }
 
-/** @param {Page} page @param {boolean} [dual=false] @param {number} [historyMinutes=15] */
-async function configured(page, dual = false, historyMinutes = 15) {
+/** @param {Page} page @param {boolean} [dual=false] @param {number} [historyMinutes=15] @param {number} [refreshSeconds=5] */
+async function configured(
+  page,
+  dual = false,
+  historyMinutes = 15,
+  refreshSeconds = 5,
+) {
   await page.addInitScript(
     (config) => {
       localStorage.setItem("nas-dashboard.settings.v1", JSON.stringify(config));
@@ -101,6 +107,7 @@ async function configured(page, dual = false, historyMinutes = 15) {
     {
       ...defaults,
       historyMinutes,
+      refreshSeconds,
       api: { mode: "direct", url: dual ? "http://nas.test/api/4" : "" },
       widgets: dual ? [...defaults.widgets, "mihomo"] : ["mihomo"],
     },
@@ -116,6 +123,92 @@ async function refresh(page) {
     page.getByRole("button", { name: "刷新", exact: true }),
   ).toBeEnabled();
 }
+
+test("mihomo reads every second without following the Glances interval", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const control = await mockSources(page);
+  await configured(page, true, 15, 30);
+  const initial = control.requests;
+  const nas = control.nasRequests;
+  for (let index = 1; index <= 5; index++) {
+    await page.clock.runFor(1000);
+    await expect.poll(() => control.requests).toBe(initial + index);
+    await expect(
+      page.locator('#widget-mihomo [data-mihomo="downloadTotal"]'),
+    ).toHaveText(bytes(control.requests * 4 * 1024 ** 2));
+  }
+  expect(control.nasRequests).toBe(nas);
+  await expect(page.locator("#refresh-label")).toHaveText(
+    "Glances 每 30 秒 · mihomo 每秒",
+  );
+  await page.getByRole("button", { name: "监控设置", exact: true }).click();
+  await page.getByLabel("Glances 更新间隔", { exact: true }).selectOption("60");
+  const beforeSave = control.requests;
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "刷新", exact: true }),
+  ).toBeEnabled();
+  // Changing only Glances timing neither reconnects nor resets the live source.
+  expect(control.requests).toBe(beforeSave);
+  const afterSave = control.nasRequests;
+  for (let index = 1; index <= 3; index++) {
+    await page.clock.runFor(1000);
+    await expect.poll(() => control.requests).toBe(beforeSave + index);
+    await expect(
+      page.locator('#widget-mihomo [data-mihomo="downloadTotal"]'),
+    ).toHaveText(bytes(control.requests * 4 * 1024 ** 2));
+  }
+  expect(control.nasRequests).toBe(afterSave);
+  await expect(page.locator("#refresh-label")).toHaveText(
+    "Glances 每 60 秒 · mihomo 每秒",
+  );
+});
+
+test("a slow live read leaves manual Glances refresh available without overlap", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const control = await mockSources(page);
+  await configured(page, true, 15, 30);
+  let reads = 0;
+  /** @type {(() => void)|undefined} */
+  let release;
+  const pending = new Promise((resolve) => {
+    release = () => resolve(undefined);
+  });
+  await page.route("**/api/mihomo.php", async (route) => {
+    reads++;
+    await pending;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: {
+          connections: { count: 0, uploadTotal: 1, downloadTotal: 1000000 },
+          memory: { inuse: 100 },
+          version: { version: "test" },
+        },
+        errors: {},
+      }),
+    });
+  });
+  await page.clock.runFor(1000);
+  await expect.poll(() => reads).toBe(1);
+  const nas = control.nasRequests;
+  await expect(
+    page.getByRole("button", { name: "刷新", exact: true }),
+  ).toBeEnabled();
+  await refresh(page);
+  expect(control.nasRequests).toBeGreaterThan(nas);
+  await page.clock.runFor(5000);
+  expect(reads).toBe(1);
+  release?.();
+  await expect(
+    page.locator('#widget-mihomo [data-mihomo="downloadTotal"]'),
+  ).toHaveText(bytes(1000000));
+  await page.getByRole("button", { name: "暂停自动更新" }).click();
+});
 
 test("mihomo alone can be configured, tested, persisted and navigated on both layouts", async ({
   page,
@@ -589,6 +682,7 @@ test("usage covers the whole page session beyond the overview history and resets
   await page.clock.install();
   const control = await mockSources(page);
   await configured(page, false, 1);
+  const initialReads = control.requests;
   for (let index = 0; index < 14; index++) {
     const requests = control.requests;
     await page.clock.runFor(5000);
@@ -600,7 +694,9 @@ test("usage covers the whole page session beyond the overview history and resets
   await page.getByRole("button", { name: "暂停自动更新" }).click();
   await page.getByRole("link", { name: "查看用量", exact: true }).click();
   const total = await page.locator('[data-mihomo-usage="total"]').textContent();
-  expect(total).toBe("3.2 MiB");
+  // The fixture adds 234 KiB per observed connection sample, independently
+  // of how many live reads fit in each virtual-clock advance.
+  expect(total).toBe(bytes((control.requests - initialReads) * 234 * 1024));
   await page.getByLabel("统计维度", { exact: true }).selectOption("outbound");
   await expect(page.locator('[data-mihomo-usage="total"]')).toHaveText(
     total ?? "",
@@ -612,9 +708,10 @@ test("usage covers the whole page session beyond the overview history and resets
   ).not.toContain("target-0.example");
   await page.reload();
   await expect(page.locator('[data-mihomo-usage="total"]')).toHaveText("--");
+  const reloadedReads = control.requests;
   await page.clock.runFor(5000);
   await expect(page.locator('[data-mihomo-usage="total"]')).toHaveText(
-    "234.0 KiB",
+    bytes((control.requests - reloadedReads) * 234 * 1024),
   );
 });
 

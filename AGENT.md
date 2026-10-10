@@ -74,6 +74,12 @@ on first visit; no private NAS address or credentials ship as defaults.
   Poller is generic: each source supplies a usable-data predicate; version metadata
   alone cannot reset backoff. Refresh/pause/visibility controls cover both sources,
   and changing an address clears only that source's samples.
+- Glances retains settlement-based configurable polling. Mihomo targets 1000 ms
+  between read starts, includes proxy/render time, and never overlaps slow reads.
+  Failed reads back off after completion. Changing the Glances interval must not
+  restart mihomo or alter its independent 15-second stale/sample-gap window.
+  Live updates repaint only mihomo modules; its in-flight request must not lock
+  manual Glances refresh when both sources are configured.
 - Mihomo usage covers all measured deltas since this page's first valid connection
   observation, independently of the short overview history window. First observations
   establish baselines, so pre-existing lifetime bytes are not imported. Aggregate

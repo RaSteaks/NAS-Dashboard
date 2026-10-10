@@ -181,6 +181,11 @@ flowchart LR
    在“概览”“连接”“用量”三个页面间切换。所有页面复用采样，导航不会额外请求上游。
    刷新、暂停和后台停止同时作用于已启用的数据源。
 
+启用后，mihomo 在面板处于前台时以**约每秒一次**的目标持续读取，与 Glances 的
+采集间隔独立。“Glances 更新间隔”只调整 NAS 指标；修改它不会重启 mihomo 读取或
+清空其用量。暂停、切到后台、关闭页面或禁用 mihomo 模块后停止读取，恢复时重新建立
+速率基线。这里使用现有 PHP 同源代理按秒读取快照，不需要增加 WebSocket／SSE 服务。
+
 参考 [MetaCubeXD](https://github.com/MetaCubeX/metacubexd) 的信息组织方式，三个页面提供：
 
 - **概览**：上传／下载、累计流量、内存、连接数与版本，流量／内存／连接趋势，
@@ -212,8 +217,11 @@ flowchart LR
 上传／下载是两次累计字节采样之间的**区间平均速率**，按实际间隔计算。首次采样、
 连接采样失败、暂停恢复、切换地址或计数重置后，等待下一次有效采样，速率显示 `--`。
 累计值由内核提供，重启或重置后重新累计；统计范围为 mihomo 处理的流量。内存接口
-是持续推送的 JSON 流，代理丢弃首帧占位值、取第二帧后主动关闭；刷新间隔沿用现有
-请求完成后调度的方式，实际周期包含请求耗时。接口说明见 [mihomo 官方 API 文档](https://wiki.metacubex.one/api/)。
+是持续推送的 JSON 流，代理丢弃首帧占位值、取第二帧后主动关闭。内存采样约一秒的
+耗时计入 mihomo 的目标周期，完成后不会再额外等待一秒。慢请求完成后
+继续读取，同一数据源的请求不会重叠；失败时自动退避。Glances 仍在请求完成后等待配置的
+间隔。两者的数据过期和速率计算独立，mihomo 每秒更新只重绘自己的模块。接口说明见
+[mihomo 官方 API 文档](https://wiki.metacubex.one/api/)。
 
 ### 4. 后续更新
 
@@ -358,7 +366,7 @@ Glances 端口避免直接暴露公网，使用 VPN 或认证入口。面板展�
 | `name` / `subtitle`                 | `我的 NAS` / `Synology · 系统监控`                   |
 | `api`                               | `mode: direct`，`url` 为空，首次访问填写             |
 | `mihomo.url`                        | `./api/mihomo.php`，仅允许同源代理地址；模块默认关闭 |
-| `refreshSeconds` / `timeoutSeconds` | 刷新间隔 `5` 秒，超时 `8` 秒                         |
+| `refreshSeconds` / `timeoutSeconds` | Glances 刷新间隔 `5` 秒，接口超时 `8` 秒             |
 | `historyMinutes`                    | 当前页面保留 `15` 分钟趋势                           |
 | `volumePattern`                     | `^/volume[0-9]+$`，筛选群晖存储卷                    |
 | `networkInterfaces`                 | `[]`，自动筛选；填写接口名可显式指定                 |

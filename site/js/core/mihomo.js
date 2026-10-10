@@ -10,6 +10,11 @@ import { validateApi } from "./config.js";
 import { readJson } from "./api.js";
 import { MihomoUsage } from "./mihomo-usage.js";
 
+// Mihomo's target cadence and valid sample window never follow the Glances
+// interval. The window tolerates slow proxy reads, while longer gaps reset rates.
+export const mihomoRefreshMs = 1000;
+export const mihomoStaleMs = 15000;
+
 /** @param {unknown} value @returns {Record<string, unknown>} */
 function record(value) {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -250,8 +255,7 @@ export class MihomoMonitor {
     const elapsed = this.observed
       ? (monotonic - this.observedMonotonic) / 1000
       : 0;
-    const paired =
-      elapsed > 0 && elapsed * 1000 <= this.config.refreshSeconds * 2500;
+    const paired = elapsed > 0 && elapsed * 1000 <= mihomoStaleMs;
     /** @type {UsageRecord[]} */
     const deltas = [];
     const activeIds = new Set(connections.map((row) => row.id));
@@ -358,7 +362,7 @@ export class MihomoMonitor {
         elapsed > 0 &&
         metrics.uploadTotal >= previous.up &&
         metrics.downloadTotal >= previous.down &&
-        elapsed * 1000 <= this.config.refreshSeconds * 2500
+        elapsed * 1000 <= mihomoStaleMs
       ) {
         metrics.up = (metrics.uploadTotal - previous.up) / elapsed;
         metrics.down = (metrics.downloadTotal - previous.down) / elapsed;
@@ -373,10 +377,7 @@ export class MihomoMonitor {
     this.state.metrics = metrics;
     this.observeConnections(snapshot, monotonic);
     const last = this.state.history.at(-1);
-    if (
-      last &&
-      snapshot.collectedAt - last.timestamp > this.config.refreshSeconds * 2500
-    )
+    if (last && snapshot.collectedAt - last.timestamp > mihomoStaleMs)
       this.state.history.push({
         timestamp: snapshot.collectedAt - 1,
         cpu: null,

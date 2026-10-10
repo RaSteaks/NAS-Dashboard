@@ -26,6 +26,8 @@ import {
   demoMihomoSnapshot,
   fetchMihomoSnapshot,
   hasMihomoData,
+  mihomoRefreshMs,
+  mihomoStaleMs,
 } from "./core/mihomo.js";
 import { mihomoStatus } from "./ui/mihomo.js";
 import { $, el, icon, icons, setText, updateStatus } from "./ui/dom.js";
@@ -43,7 +45,7 @@ let poller;
 /** @type {import("./core/poller.js").Poller<MihomoSnapshot>|undefined} */
 let mihomoPoller;
 let mihomo = new MihomoMonitor(config);
-// A single refresh control reflects both independent in-flight requests.
+// Source guards prevent overlap while live reads leave Glances refresh usable.
 /** @type {Set<"glances"|"mihomo">} */
 const busySources = new Set();
 /** @type {Snapshot|undefined} */
@@ -95,16 +97,18 @@ function renderConnection() {
             lastSuccess,
             error: connectionError,
             errors: snapshot?.errors ?? {},
+            staleAfterMs: Math.max(15000, config.refreshSeconds * 3000),
           },
         ]
       : []),
-    ...(mihomoActive() ? [{ name: "mihomo", ...mihomo.state }] : []),
+    ...(mihomoActive()
+      ? [{ name: "mihomo", ...mihomo.state, staleAfterMs: mihomoStaleMs }]
+      : []),
   ];
   const stale = sources.some(
     (source) =>
       source.lastSuccess > 0 &&
-      Date.now() - source.lastSuccess >
-        Math.max(15000, config.refreshSeconds * 3000),
+      Date.now() - source.lastSuccess > source.staleAfterMs,
   );
   const overall = !sources.length
     ? "idle"
@@ -143,7 +147,17 @@ function renderConnection() {
   );
   $("source-badge", HTMLElement).className =
     `source-badge ${demo ? "demo" : ""}`;
-  setText("refresh-label", `每 ${config.refreshSeconds} 秒更新`);
+  setText(
+    "refresh-label",
+    mihomoActive()
+      ? [
+          ...(demo || config.api.url
+            ? [`Glances 每 ${config.refreshSeconds} 秒`]
+            : []),
+          "mihomo 每秒",
+        ].join(" · ")
+      : `每 ${config.refreshSeconds} 秒更新`,
+  );
   const successes = sources
     .map((source) => source.lastSuccess)
     .filter((value) => value > 0);
@@ -166,10 +180,7 @@ function renderConnection() {
   for (const status of /** @type {NodeListOf<HTMLElement>} */ (
     document.querySelectorAll("[data-mihomo-status]")
   ))
-    updateStatus(
-      status,
-      mihomoStatus({ mihomo: mihomo.state, config, paused, demo }),
-    );
+    updateStatus(status, mihomoStatus({ mihomo: mihomo.state, paused, demo }));
   if (configError)
     notice(
       `${configError} 请在导航栏的「监控设置」中检查连接配置。`,
@@ -279,7 +290,8 @@ function renderOverview(current) {
   }
 }
 
-function renderAll() {
+/** Update only the affected module during live reads. @param {WidgetId} [moduleId] */
+function renderAll(moduleId) {
   if (!snapshot || !metrics) return;
   /** @type {WidgetContext} */
   const context = {
@@ -292,8 +304,13 @@ function renderAll() {
     paused,
     demo,
   };
-  for (const widget of mounted.values()) widget.update(context);
-  for (const view of viewInstances.values()) view.update(context);
+  for (const [id, widget] of mounted)
+    if (!moduleId || moduleId === id) widget.update(context);
+  for (const [id, view] of viewInstances) {
+    const owner =
+      detailViews.find((definition) => definition.id === id)?.moduleId ?? id;
+    if (!moduleId || moduleId === owner) view.update(context);
+  }
   icons();
 }
 
@@ -541,9 +558,9 @@ function renderHeader() {
   document.title = `${config.name} · ${viewMeta(currentView).title}${demo ? " · 演示" : ""}`;
 }
 
-/** One busy indicator combines independent source requests without queuing them. */
+/** Continuous mihomo reads must not lock manual Glances refresh in dual-source mode. */
 function refreshAvailability() {
-  const busy = busySources.size > 0;
+  const busy = busySources.has(demo || config.api.url ? "glances" : "mihomo");
   $("refresh-button", HTMLButtonElement).disabled =
     busy || (!demo && !config.api.url && !mihomoActive());
   $("refresh-button", HTMLElement).classList.toggle("is-busy", busy);
@@ -602,7 +619,10 @@ function startPoller(glances = true, proxy = true) {
   }
   if (proxy && mihomoActive()) {
     const instance = new Poller({
-      intervalMs: config.refreshSeconds * 1000,
+      // The proxy's memory sample takes about a second: count that time in
+      // the live cadence rather than waiting another interval after each read.
+      intervalMs: mihomoRefreshMs,
+      cadence: "start",
       fetch: (signal) =>
         demo
           ? Promise.resolve(demoMihomoSnapshot())
@@ -610,12 +630,12 @@ function startPoller(glances = true, proxy = true) {
       hasData: hasMihomoData,
       onData(next) {
         mihomo.receive(next, demo ? next.collectedAt : performance.now());
-        renderAll();
+        renderAll("mihomo");
         renderConnection();
       },
       onError(error) {
         mihomo.fail(requestError(error));
-        renderAll();
+        renderAll("mihomo");
         renderConnection();
       },
       onBusy(busy) {
@@ -1037,7 +1057,7 @@ $("settings-form", HTMLElement).addEventListener("submit", (event) => {
   if (intervalChanged || modulesChanged || glancesChanged || mihomoChanged)
     startPoller(
       intervalChanged || modulesChanged || glancesChanged,
-      intervalChanged || mihomoChanged || mihomoEnabledChanged,
+      mihomoChanged || mihomoEnabledChanged,
     );
   repaint();
 });
