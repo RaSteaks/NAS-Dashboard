@@ -19,6 +19,10 @@ on first visit; no private NAS address or credentials ship as defaults.
 - `site/js/ui/` owns safe DOM rendering and Chart.js integration; icons come from
   `site/js/ui/icons.js`.
 - Browser preferences are versioned in localStorage. Credentials stay server-side.
+- The document bootstrap reads the optional deployed commit before loading any
+  ES module, then maps the complete runtime graph to that revision through an
+  import map. Manual deployments use a fresh per-page token. Keep its module
+  list current; deployment browser tests cover real HTTP caches and saved settings.
 - Optional mihomo monitoring uses a separate same-origin `api/mihomo.php` proxy,
   private sibling `config/mihomo.php` (or MIHOMO_CONFIG / MIHOMO_API_URL / MIHOMO_SECRET),
   and independent source state. It can run without Glances. Its widget defaults off.

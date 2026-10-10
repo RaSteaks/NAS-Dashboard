@@ -8,8 +8,8 @@
     <title>NAS Dashboard · 运行概览</title>
     <!-- Bump the icon version when its artwork changes to refresh cached tabs. -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=3" />
-    <!-- Version shell assets together so cached pages pick up navigation changes. -->
-    <link rel="stylesheet" href="./styles.css?v=6" />
+    <!-- The shell version refreshes CSS; the bootstrap versions every JS import. -->
+    <link rel="stylesheet" href="./styles.css?v=7" />
   </head>
   <body>
     <a class="skip-link" href="#main">跳至监控数据</a>
@@ -471,6 +471,96 @@
     </dialog>
     <noscript>请启用 JavaScript 以读取 NAS 运行数据。</noscript>
     <script defer src="./vendor/chart.umd.min.js"></script>
-    <script type="module" src="./js/main.js?v=6"></script>
+    <script>
+      // Wait for deferred Chart.js before importing modules that capture it.
+      document.addEventListener(
+        "DOMContentLoaded",
+        async () => {
+          // A version on main.js does not reach its relative imports. Map the
+          // entire runtime graph before loading any module, including shared
+          // dependencies, so old cached exports cannot break initialization.
+          // Add new runtime modules here; browser tests verify full coverage.
+          const modules = [
+            "main.js",
+            "core/api.js",
+            "core/config.js",
+            "core/demo.js",
+            "core/format.js",
+            "core/metrics.js",
+            "core/mihomo-usage.js",
+            "core/mihomo.js",
+            "core/poller.js",
+            "ui/chart.js",
+            "ui/dom.js",
+            "ui/icons.js",
+            "ui/mihomo-navigation.js",
+            "ui/mihomo-table.js",
+            "ui/mihomo.js",
+            "ui/table-pagination.js",
+            "views/containers.js",
+            "views/index.js",
+            "views/mihomo-connections.js",
+            "views/mihomo-usage.js",
+            "views/mihomo.js",
+            "views/network.js",
+            "views/resources.js",
+            "views/storage.js",
+            "widgets/containers.js",
+            "widgets/index.js",
+            "widgets/mihomo.js",
+            "widgets/network.js",
+            "widgets/resources.js",
+            "widgets/storage.js",
+          ];
+          const base = new URL("./js/", document.baseURI);
+          // Manual deployments have no stamp; a fresh page token still avoids
+          // stale dependencies without clearing saved browser preferences.
+          let revision = `manual-${Date.now().toString(36)}`;
+          try {
+            const response = await fetch(new URL("../build.json", base), {
+              cache: "no-store",
+              signal: AbortSignal.timeout(3000),
+            });
+            if (response.ok) {
+              const build = await response.json();
+              if (
+                typeof build?.commit === "string" &&
+                /^[0-9a-f]{40}$/i.test(build.commit)
+              )
+                revision = build.commit;
+            }
+          } catch {
+            // Optional deployment metadata never blocks configuration loading.
+          }
+          const map = document.createElement("script");
+          map.type = "importmap";
+          map.textContent = JSON.stringify({
+            imports: Object.fromEntries(
+              modules.map((path) => {
+                const url = new URL(path, base).href;
+                return [url, `${url}?v=${revision}`];
+              }),
+            ),
+          });
+          document.head.append(map);
+          try {
+            await import(new URL("main.js", base).href);
+          } catch (error) {
+            // Report failures before main.js can own the existing notice UI.
+            const notice = document.getElementById("notice");
+            notice.className = "notice warning";
+            notice.hidden = false;
+            document.getElementById("notice-text").textContent =
+              "页面加载失败，请重新加载；若仍失败，请检查网站文件是否完整。";
+            const retry = document.getElementById("notice-action");
+            retry.textContent = "重新加载";
+            retry.hidden = false;
+            retry.addEventListener("click", () => location.reload());
+            console.error("Dashboard startup failed", error);
+          }
+        },
+        { once: true },
+      );
+    </script>
   </body>
 </html>

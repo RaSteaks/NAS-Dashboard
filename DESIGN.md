@@ -183,6 +183,9 @@ the readings on screen in place; only a changed data source discards samples, so
 paused dashboard never waits on a poll that will not start. API credentials are
 never accepted in browser fields.
 Persistent failures use one page notice rather than repeated toasts.
+Before application modules initialize, a failed module import uses that same
+notice region with an explicit reload action. Reload preserves browser-local
+settings; it is distinct from the normal data-request retry action.
 
 ### Iconography
 
