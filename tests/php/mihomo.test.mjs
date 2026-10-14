@@ -15,12 +15,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { smartFixture } from "../fixtures/smart.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
 // This suite executes the shipped PHP entry point, rather than the Node preview
 // implementation. Containers, config and fake credentials are all disposable.
-test("PHP/cURL mihomo proxy contract", { timeout: 180000 }, async (t) => {
+test("PHP/cURL monitoring proxy contracts", { timeout: 180000 }, async (t) => {
   const fixtures = realpathSync(
     mkdtempSync(path.join(tmpdir(), "nas-mihomo-php-")),
   );
@@ -30,6 +31,11 @@ test("PHP/cURL mihomo proxy contract", { timeout: 180000 }, async (t) => {
   copyFileSync(
     path.join(root, "site", "api", "mihomo.php"),
     path.join(fixtures, "site", "api", "mihomo.php"),
+  );
+  // Exercise the shipped Glances boundary against the same disposable upstream.
+  copyFileSync(
+    path.join(root, "site", "api", "index.php"),
+    path.join(fixtures, "site", "api", "index.php"),
   );
   copyFileSync(
     path.join(root, "tests", "php", "upstream.php"),
@@ -45,6 +51,33 @@ test("PHP/cURL mihomo proxy contract", { timeout: 180000 }, async (t) => {
 // Private test-only configuration; environment overrides are verified below.
 return ['api_url' => 'http://127.0.0.1:9090/fixture', 'secret' => 'fixture-secret'];
 `,
+  );
+  writeFileSync(
+    path.join(fixtures, "glances.php"),
+    "<?php return ['api_url' => 'http://127.0.0.1:9090/glances', 'token' => 'fixture-secret'];\n",
+  );
+  writeFileSync(
+    path.join(fixtures, "smart.json"),
+    JSON.stringify([
+      ...smartFixture,
+      {
+        DeviceName: "sda",
+        190: { name: "Airflow_Temperature_Cel", raw: "31", value: "069" },
+      },
+      {
+        DeviceName: "nvme0n1",
+        2: {
+          name: "Temperature (°C)",
+          key: "_temperature",
+          raw: 42,
+          value: 42,
+        },
+      },
+      {
+        DeviceName: "sdb",
+        194: { raw: { private: "discard-me" }, value: "060" },
+      },
+    ]),
   );
 
   /** @param {string[]} args */
@@ -70,6 +103,8 @@ return ['api_url' => 'http://127.0.0.1:9090/fixture', 'secret' => 'fixture-secre
       `${fixtures}:/fixtures`,
       "-e",
       "MIHOMO_CONFIG=/fixtures/private.php",
+      "-e",
+      "GLANCES_CONFIG=/fixtures/glances.php",
       // Local literal addresses must bypass an inherited broken environment proxy.
       "-e",
       "http_proxy=http://127.0.0.1:1",
@@ -201,6 +236,67 @@ return ['api_url' => 'http://127.0.0.1:9090/fixture', 'secret' => 'fixture-secre
           readFileSync(path.join(fixtures, "requests"), "utf8"),
           /untrusted|browser-secret|restart/,
         );
+      },
+    );
+    await t.test(
+      "projects only SMART temperature fields and isolates unavailable disks",
+      async () => {
+        const glancesUrl = new URL("index.php?plugins=fs,smart", url);
+        setMode("good");
+        const response = await fetch(glancesUrl);
+        assert.equal(response.status, 200);
+        const result = await response.json();
+        assert.deepEqual(result.errors, {});
+        assert.equal(result.data.fs[0].mnt_point, "/volume1");
+        assert.deepEqual(result.data.smart, [
+          { DeviceName: "sdc Example SSD" },
+          {
+            DeviceName: "sdd Example HDD",
+            194: {
+              name: "Temperature_Celsius",
+              key: "Temperature_Celsius",
+              raw: "34 (Min/Max 14/61)",
+            },
+          },
+          {
+            DeviceName: "sde Example HDD",
+            194: { name: "Temperature_Celsius", raw: "33 (Min/Max 3/63)" },
+          },
+          {
+            DeviceName: "sdf Example HDD",
+            194: { name: "Temperature_Celsius", raw: "34 (Min/Max 15/60)" },
+          },
+          {
+            DeviceName: "sdg Example HDD",
+            194: { name: "Temperature_Celsius", raw: "33 (Min/Max 15/57)" },
+          },
+          {
+            DeviceName: "sda",
+            190: { name: "Airflow_Temperature_Cel", raw: "31" },
+          },
+          {
+            DeviceName: "nvme0n1",
+            2: { name: "Temperature (°C)", key: "_temperature", raw: 42 },
+          },
+          { DeviceName: "sdb", 194: [] },
+        ]);
+        assert.doesNotMatch(
+          JSON.stringify(result),
+          /fixture-private|discard-me|Power_On_Hours|worst|"value"/,
+        );
+
+        setMode("smart-missing");
+        const partial = await (await fetch(glancesUrl)).json();
+        assert.match(partial.errors.smart, /HTTP 400/);
+        assert.equal(partial.data.fs[0].mnt_point, "/volume1");
+        setMode("empty");
+        const empty = await (await fetch(glancesUrl)).json();
+        assert.deepEqual(empty.data.smart, []);
+        assert.deepEqual(empty.errors, {});
+        const denied = await fetch(
+          new URL("index.php?plugins=smart,processlist", url),
+        );
+        assert.equal(denied.status, 400);
       },
     );
     await t.test(

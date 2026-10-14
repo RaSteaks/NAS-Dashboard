@@ -5,7 +5,7 @@
 /**
  * Glances plugin names: the minimal allowlist a snapshot request may use.
  *
- * @typedef {"cpu"|"mem"|"load"|"sensors"|"fs"|"network"|"containers"|"system"|"uptime"} Plugin
+ * @typedef {"cpu"|"mem"|"load"|"sensors"|"fs"|"smart"|"network"|"containers"|"system"|"uptime"} Plugin
  */
 
 /**
@@ -168,6 +168,13 @@
  */
 
 /**
+ * A physical device reported by SMART; absent temperature stays unknown.
+ * @typedef {object} Disk
+ * @property {string} name Upstream device identification, without inferred bay numbers.
+ * @property {number|null} temperature Celsius, never the normalized SMART score.
+ */
+
+/**
  * @typedef {object} NetworkInterface
  * @property {string} name
  * @property {number|null} rx
@@ -219,6 +226,7 @@
  * @property {string} temperatureLabel
  * @property {TemperatureSensor[]} sensors All temperature readings, hottest first.
  * @property {Volume[]} volumes
+ * @property {Disk[]} disks Physical devices, including those without temperature data.
  * @property {NetworkInterface[]} interfaces
  * @property {number|null} rx
  * @property {number|null} tx

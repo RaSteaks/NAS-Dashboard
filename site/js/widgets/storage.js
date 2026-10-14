@@ -15,7 +15,8 @@ export const storageWidget = {
   id: "storage",
   title: "存储空间",
   icon: "hard-drive",
-  plugins: ["fs"],
+  // The detail view shares this snapshot; disabling storage also stops SMART reads.
+  plugins: ["fs", "smart"],
   mount(element) {
     const status = el("span", { class: "panel-status neutral" }, "等待采集");
     const summary = el("div", { class: "storage-summary" });

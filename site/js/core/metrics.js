@@ -49,6 +49,38 @@ function total(values) {
 }
 
 /**
+ * @param {Record<string, unknown>} disk
+ * @returns {number|null}
+ */
+function diskTemperature(disk) {
+  // ATA 194/190 store Celsius in raw, e.g. "34 (Min/Max 14/61)".
+  // Glances' NVMe temperature has a named key instead of a fixed attribute ID.
+  const attributes = [
+    record(disk["194"]),
+    record(disk["190"]),
+    ...Object.values(disk)
+      .map(record)
+      .filter(
+        (attribute) =>
+          attribute.key === "_temperature" ||
+          attribute.name === "Temperature (°C)",
+      ),
+  ];
+  for (const attribute of attributes) {
+    const raw = attribute.raw;
+    if (number(raw) !== null) return number(raw);
+    const match =
+      typeof raw === "string"
+        ? raw.match(/^\s*(-?\d+(?:\.\d+)?)(?=\s|$)/)
+        : null;
+    const value = match ? number(Number(match[1])) : null;
+    if (value !== null) return value;
+  }
+  // SMART value/worst/threshold are normalized scores, not temperatures.
+  return null;
+}
+
+/**
  * @param {Snapshot} snapshot
  * @param {Config} config
  * @returns {Metrics}
@@ -140,6 +172,12 @@ export function normalize(snapshot, config) {
     temperatureLabel: temperature ? text(temperature.label) : "",
     sensors: temperatureSensors,
     volumes,
+    disks: rows(snapshot.data.smart)
+      .filter((disk) => text(disk.DeviceName).trim())
+      .map((disk) => ({
+        name: text(disk.DeviceName),
+        temperature: diskTemperature(disk),
+      })),
     interfaces: network,
     rx: total(network.map((item) => item.rx)),
     tx: total(network.map((item) => item.tx)),

@@ -219,6 +219,10 @@ one unit and switch to decimal steps, and every reading — including chart axes
 tooltips, and footnotes — follows it. CPU and memory use percent; load is
 dimensionless. API success is distinct from hardware health, and capacity alone
 never implies RAID health. Demo data is opt-in and persistently labeled.
+The storage detail view lists physical devices from the SMART snapshot separately
+from volumes. Each device keeps its upstream name; missing temperatures render
+`--`. Celsius comes from raw ATA/NVMe temperature attributes, never normalized
+SMART scores. SMART failure is visible without blocking volume capacity readings.
 Mihomo rates are interval averages calculated from its own cumulative byte
 counters and actual elapsed time. First samples, failures, pauses and counter
 resets display `--` until a second valid sample. Its memory reading is bytes,

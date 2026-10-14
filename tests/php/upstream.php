@@ -13,7 +13,17 @@ if ($authorization !== 'Bearer fixture-secret' || $mode === 'unauthorized') {
     echo '{"error":"unauthorized"}';
     return;
 }
-if ($endpoint === 'connections') {
+if ($endpoint === 'smart') {
+    // SMART includes nested private fields to verify the real PHP projection.
+    if ($mode === 'smart-missing') {
+        http_response_code(400);
+        echo '{"detail":"Unknown plugin smart"}';
+    } else {
+        echo $mode === 'empty' ? '[]' : file_get_contents('/fixtures/smart.json');
+    }
+} elseif ($endpoint === 'fs') {
+    echo '[{"mnt_point":"/volume1","device_name":"/dev/mapper/cachedev_0","size":100,"used":60,"free":40,"percent":60}]';
+} elseif ($endpoint === 'connections') {
     if ($mode === 'oversized') {
         echo str_repeat('x', 2 * 1024 * 1024 + 1);
     } elseif ($mode === 'redirect') {

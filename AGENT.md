@@ -66,6 +66,9 @@ on first visit; no private NAS address or credentials ship as defaults.
 - Bond interfaces are preferred over member interfaces to avoid double counting.
 - Sensors include `temperature_core`; container images may be strings or arrays.
   Container health states (`healthy`, `unhealthy`, `starting`) also count as running.
+- Storage requests `smart` only while enabled. Physical disks retain upstream names
+  and use raw ATA 194/190 or named NVMe Celsius readings, never normalized scores.
+  Name-only devices stay visible with `--`; SMART failures do not block volume data.
 - History is bounded and exists only while this page is open. Demo history is fake
   and explicitly labeled. Hidden tabs suspend polling; requests never overlap.
 - Mihomo byte rates use counter deltas divided by actual monotonic elapsed seconds.

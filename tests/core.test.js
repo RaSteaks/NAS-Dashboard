@@ -18,6 +18,7 @@ import { normalize } from "../site/js/core/metrics.js";
 import { Poller } from "../site/js/core/poller.js";
 import { requiredPlugins } from "../site/js/widgets/index.js";
 import { containerStatus } from "../site/js/widgets/containers.js";
+import { smartFixture } from "./fixtures/smart.js";
 
 /** @typedef {import("../site/js/core/types.js").Snapshot} Snapshot */
 /** @typedef {import("../site/js/core/types.js").HistoryPoint} HistoryPoint */
@@ -174,6 +175,72 @@ describe("Glances normalization", () => {
       { label: "CPU Package", value: 44 },
     ]);
   });
+  it("reads SMART raw Celsius and preserves devices with no temperature", () => {
+    const result = normalize(snapshot({ smart: smartFixture }), defaults);
+    expect(result.disks).toEqual([
+      { name: "sdc Example SSD", temperature: null },
+      { name: "sdd Example HDD", temperature: 34 },
+      { name: "sde Example HDD", temperature: 33 },
+      { name: "sdf Example HDD", temperature: 34 },
+      { name: "sdg Example HDD", temperature: 33 },
+    ]);
+    // SMART disk readings must not replace the overview's CPU/sensor temperature.
+    expect(result.temperature).toBeNull();
+  });
+  it.each([
+    [0, 0],
+    ["0", 0],
+    [34.5, 34.5],
+    [" 34.5 (Min/Max 14/61)", 34.5],
+    [undefined, null],
+    [null, null],
+    ["", null],
+    ["N/A", null],
+    ["34invalid", null],
+    [false, null],
+    [Infinity, null],
+    [{ temperature: 34 }, null],
+  ])(
+    "normalizes SMART raw %j to %j without using the score",
+    (raw, expected) => {
+      const result = normalize(
+        snapshot({
+          smart: [{ DeviceName: "sda", 194: { raw, value: "060" } }],
+        }),
+        defaults,
+      );
+      expect(result.disks).toEqual([{ name: "sda", temperature: expected }]);
+    },
+  );
+  it("supports ATA airflow and named NVMe temperatures without using other counters", () => {
+    const result = normalize(
+      snapshot({
+        smart: [
+          { DeviceName: "sda", 190: { raw: "31" } },
+          { DeviceName: "sdb", 194: { raw: "34" }, 190: { raw: "31" } },
+          {
+            DeviceName: "nvme0n1",
+            2: { name: "Temperature (°C)", key: "_temperature", raw: 42 },
+          },
+          {
+            DeviceName: "nvme1n1",
+            17: { name: "Warning temperature time (min)", raw: 99 },
+          },
+          {},
+          null,
+        ],
+      }),
+      defaults,
+    );
+    expect(result.disks).toEqual([
+      { name: "sda", temperature: 31 },
+      { name: "sdb", temperature: 34 },
+      { name: "nvme0n1", temperature: 42 },
+      { name: "nvme1n1", temperature: null },
+    ]);
+    expect(normalize(snapshot({}), defaults).disks).toEqual([]);
+    expect(normalize(snapshot({ smart: {} }), defaults).disks).toEqual([]);
+  });
   it("carries memory free space and interface counters for detail views", () => {
     const result = normalize(
       snapshot({
@@ -288,7 +355,9 @@ describe("configuration", () => {
     expect(requiredPlugins([])).not.toContain("containers");
     expect(requiredPlugins([])).not.toContain("network");
     expect(requiredPlugins([])).not.toContain("fs");
+    expect(requiredPlugins([])).not.toContain("smart");
     expect(requiredPlugins(["storage"])).toContain("fs");
+    expect(requiredPlugins(["storage"])).toContain("smart");
   });
 });
 
@@ -307,11 +376,12 @@ describe("API transport", () => {
     );
     const result = await fetchSnapshot(
       mergeConfig({ api: { mode: "direct", url: "http://nas.test/api/4" } }),
-      ["cpu", "sensors"],
+      ["cpu", "sensors", "smart"],
       new AbortController().signal,
     );
     expect(result.data.cpu).toEqual({ total: 12 });
     expect(result.errors.sensors).toContain("未找到");
+    expect(result.errors.smart).toContain("未找到");
   });
   it("does not consume source PHP or HTML as JSON", async () => {
     vi.stubGlobal("location", { href: "http://dashboard.test/" });
@@ -338,19 +408,24 @@ describe("API transport", () => {
       /** @param {string|URL} _url */
       async (_url) =>
         new Response(
-          '{"data":{"cpu":{"total":12}},"errors":{},"collectedAt":0}',
+          JSON.stringify({
+            data: { cpu: { total: 12 }, smart: smartFixture },
+            errors: {},
+            collectedAt: 0,
+          }),
           { headers: { "content-type": "application/json" } },
         ),
     );
     vi.stubGlobal("fetch", fetcher);
     const result = await fetchSnapshot(
       mergeConfig({ api: { mode: "proxy", url: "./api/index.php" } }),
-      ["cpu"],
+      ["cpu", "smart"],
       new AbortController().signal,
     );
     expect(String(fetcher.mock.calls[0][0])).toBe(
-      "http://dashboard.test/nas/api/index.php?plugins=cpu",
+      "http://dashboard.test/nas/api/index.php?plugins=cpu%2Csmart",
     );
+    expect(result.data.smart).toEqual(smartFixture);
     expect(result.collectedAt).toBeGreaterThan(0);
   });
 });

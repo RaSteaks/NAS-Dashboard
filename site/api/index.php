@@ -24,12 +24,13 @@ $fields = [
     'load' => ['min1', 'min5', 'min15', 'cpucore'],
     'sensors' => ['label', 'type', 'unit', 'value'],
     'fs' => ['mnt_point', 'device_name', 'fs_type', 'used', 'size', 'free', 'percent'],
+    'smart' => ['DeviceName'],
     'network' => ['interface_name', 'bytes_recv_rate_per_sec', 'bytes_sent_rate_per_sec', 'speed', 'is_up'],
     'containers' => ['id', 'name', 'image', 'status', 'cpu_percent', 'memory_usage'],
     'system' => ['hostname', 'hr_name', 'os_name'],
     'uptime' => [],
 ];
-$listPlugins = ['sensors', 'fs', 'network', 'containers'];
+$listPlugins = ['sensors', 'fs', 'smart', 'network', 'containers'];
 $rawPlugins = $_GET['plugins'] ?? implode(',', array_keys($fields));
 if (!is_string($rawPlugins)) {
     respond(400, ['error' => 'Invalid plugins parameter.']);
@@ -143,8 +144,29 @@ foreach ($handles as $plugin => $handle) {
             $allowedFields = array_flip($fields[$plugin]);
             if (in_array($plugin, $listPlugins, true)) {
                 $data[$plugin] = array_values(array_map(
-                    function ($row) use ($allowedFields): array {
-                        return is_array($row) ? array_intersect_key($row, $allowedFields) : [];
+                    function ($row) use ($allowedFields, $plugin): array {
+                        if (!is_array($row)) {
+                            return [];
+                        }
+                        $filtered = array_intersect_key($row, $allowedFields);
+                        if ($plugin === 'smart') {
+                            // Pass only ATA/NVMe temperature attributes, never the full SMART record.
+                            foreach ($row as $key => $attribute) {
+                                if (!is_array($attribute) || (
+                                    !in_array((string) $key, ['194', '190'], true)
+                                    && ($attribute['key'] ?? null) !== '_temperature'
+                                    && ($attribute['name'] ?? null) !== 'Temperature (°C)'
+                                )) {
+                                    continue;
+                                }
+                                $filtered[$key] = array_intersect_key($attribute, array_flip(['name', 'key', 'raw']));
+                                // Raw readings are scalars; nested objects must not cross this boundary.
+                                if (isset($filtered[$key]['raw']) && !is_scalar($filtered[$key]['raw'])) {
+                                    unset($filtered[$key]['raw']);
+                                }
+                            }
+                        }
+                        return $filtered;
                     },
                     $decoded
                 ));

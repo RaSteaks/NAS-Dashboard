@@ -19,6 +19,8 @@ const allowed = [
   "load",
   "sensors",
   "fs",
+  // Match the storage module's optional SMART request in the PHP proxy.
+  "smart",
   "network",
   "containers",
   "system",

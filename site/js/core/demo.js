@@ -72,6 +72,22 @@ export function demoSnapshot(timestamp = Date.now()) {
           percent: 23.6,
         },
       ],
+      // SMART demo includes a device without attributes to exercise the unknown state.
+      smart: [
+        { DeviceName: "sda Example SSD" },
+        {
+          DeviceName: "sdb Example HDD",
+          194: {
+            name: "Temperature_Celsius",
+            raw: "34 (Min/Max 14/61)",
+            value: "060",
+          },
+        },
+        {
+          DeviceName: "sdc Example HDD",
+          194: { name: "Temperature_Celsius", raw: "33", value: "062" },
+        },
+      ],
       network: [
         {
           interface_name: "eth0",

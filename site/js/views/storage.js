@@ -72,7 +72,7 @@ export const storageView = {
   id: "storage",
   eyebrow: "STORAGE",
   title: "存储空间",
-  description: "各存储卷的容量、占用与剩余空间。",
+  description: "各存储卷的容量、占用、剩余空间与硬盘温度。",
   mount(element) {
     const summary = detailCard("容量汇总", "hard-drive");
     summary.card.classList.add("span");
@@ -97,10 +97,22 @@ export const storageView = {
     );
     const listHeading = el("h2", {}, "存储卷明细");
     const list = el("div", { class: "volume-cards" });
+    const temperatures = detailCard("硬盘温度", "thermometer");
+    const diskList = el("div", {
+      class: "fact-list",
+      role: "list",
+      "aria-label": "硬盘温度",
+    });
+    const diskStatus = el("p", {
+      class: "panel-footnote disk-temperature-status",
+      role: "status",
+    });
+    temperatures.body.append(diskList, diskStatus);
     element.append(
       summary.card,
       el("div", { class: "section-toolbar" }, listHeading),
       list,
+      temperatures.card,
     );
     return {
       update({ metrics, snapshot, config }) {
@@ -123,6 +135,40 @@ export const storageView = {
                 ),
               ]),
         );
+        // Show every detected physical device, even when it has no temperature attribute.
+        diskList.replaceChildren(
+          ...(metrics.disks.length
+            ? metrics.disks.map((disk) =>
+                el(
+                  "div",
+                  { class: "fact-row", role: "listitem" },
+                  el("span", { class: "volume-device" }, disk.name),
+                  el(
+                    "strong",
+                    { class: "disk-temperature" },
+                    disk.temperature === null
+                      ? "--"
+                      : `${decimal(disk.temperature, 0)} °C`,
+                  ),
+                ),
+              )
+            : [
+                el(
+                  "div",
+                  { class: "fact-row", role: "listitem" },
+                  el("span", {}, "暂无硬盘数据"),
+                  el("strong", { class: "disk-temperature" }, "--"),
+                ),
+              ]),
+        );
+        const available = metrics.disks.filter(
+          (disk) => disk.temperature !== null,
+        ).length;
+        const status = snapshot.errors.smart
+          ? `硬盘温度暂不可用：${snapshot.errors.smart}`
+          : `已读取 ${metrics.disks.length} 块硬盘，${available} 块有温度数据`;
+        // Announce coverage/error changes once instead of on every background poll.
+        if (diskStatus.textContent !== status) diskStatus.textContent = status;
       },
       destroy() {},
     };

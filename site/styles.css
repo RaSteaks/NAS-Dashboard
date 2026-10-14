@@ -1729,6 +1729,14 @@ h1 {
 .volume-device {
   overflow-wrap: anywhere;
 }
+/* Long device names wrap; Celsius readings and the unknown marker stay intact. */
+.disk-temperature {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.disk-temperature-status {
+  padding: 12px 0 0;
+}
 .detail-chart {
   height: 232px;
 }
