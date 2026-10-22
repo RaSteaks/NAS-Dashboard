@@ -134,6 +134,25 @@
               </button>
             </div>
           </div>
+          <!-- Shared display controls remain available across every detail route. -->
+          <div class="display-toolbar" aria-label="显示偏好">
+            <div class="display-controls">
+              <label for="display-chart-style">图表</label>
+              <select id="display-chart-style" aria-label="图表类型">
+                <option value="line">折线图</option>
+                <option value="area" selected>面积图</option>
+                <option value="bar">柱状图</option>
+              </select>
+              <label for="display-text-size">字号</label>
+              <select id="display-text-size" aria-label="显示字号">
+                <option value="standard">标准</option>
+                <option value="large">大号</option>
+              </select>
+            </div>
+            <span id="collection-hint" class="collection-hint"
+              >连接后支持后台采集</span
+            >
+          </div>
           <div class="notice-slot">
             <div id="notice" class="notice" hidden role="status">
               <i data-lucide="info"></i><span id="notice-text"></span
@@ -434,7 +453,7 @@
               spellcheck="false"
             />
             <span id="mihomo-help" class="field-hint"
-              >启用后在页面前台按秒读取；内核地址和 Secret
+              >启用后按秒读取，切换标签页后继续采集；内核地址和 Secret
               仅在服务端配置。</span
             >
             <span id="mihomo-error" class="field-error" role="status"></span>

@@ -17,6 +17,8 @@
   "widgets": ["resources", "storage", "network", "containers"],
   "unit": "auto",
   "unitBase": 1024,
+  "chartStyle": "area",
+  "textSize": "standard",
   "thresholds": {
     "cpu": 85,
     "memory": 85,

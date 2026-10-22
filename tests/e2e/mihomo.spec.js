@@ -443,6 +443,9 @@ test("mihomo proxy validation stays in the dialog and disabling hides its active
 test("demo mihomo is opt-in and never contacts its proxy", async ({ page }) => {
   const control = await mockSources(page);
   await page.goto("/?demo=1");
+  // Absence is also true before async bootstrap; wait for the first snapshot
+  // before testing the settings entry and the disabled-by-default module.
+  await expect(page.locator("#cpu-value")).not.toHaveText("--");
   await expect(page.locator("#widget-mihomo")).toHaveCount(0);
   await page.getByRole("button", { name: "监控设置", exact: true }).click();
   await page.getByRole("checkbox", { name: "mihomo 监控" }).check();
@@ -459,7 +462,9 @@ test("demo mihomo is opt-in and never contacts its proxy", async ({ page }) => {
   expect(control.requests).toBe(0);
 });
 
-test("hidden tabs stop both sources and resume with a fresh rate baseline", async ({
+// Simulate lifecycle signals because headless engines do not reliably hide tabs.
+// Real timers are controlled, while all source requests still cross the browser transport.
+test("hidden tabs keep both sources collecting without resetting rates", async ({
   page,
 }) => {
   await page.clock.install();
@@ -469,9 +474,6 @@ test("hidden tabs stop both sources and resume with a fresh rate baseline", asyn
   await expect(
     page.locator('#widget-mihomo [data-mihomo="up"]'),
   ).not.toHaveText("--");
-  await expect(
-    page.getByRole("button", { name: "刷新", exact: true }),
-  ).toBeEnabled();
   await page.evaluate(() => {
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -481,12 +483,18 @@ test("hidden tabs stop both sources and resume with a fresh rate baseline", asyn
   });
   const requests = control.requests;
   const nasRequests = control.nasRequests;
-  await page.clock.runFor(30000);
-  expect(control.requests).toBe(requests);
-  expect(control.nasRequests).toBe(nasRequests);
-  await expect(page.locator("#widget-mihomo [data-mihomo-status]")).toHaveText(
-    "数据已过期",
-  );
+  for (let index = 0; index < 7; index++) {
+    await page.clock.runFor(1000);
+    await expect.poll(() => control.requests).toBeGreaterThan(requests + index);
+  }
+  expect(control.nasRequests).toBeGreaterThan(nasRequests);
+  await expect(page.locator("#connection-text")).toHaveText("已连接");
+  await expect(
+    page.locator('#widget-mihomo [data-mihomo="up"]'),
+  ).not.toHaveText("--");
+
+  // Returning refreshes immediately, retaining a still-valid rate baseline.
+  const beforeReturn = control.requests;
   await page.evaluate(() => {
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -494,14 +502,51 @@ test("hidden tabs stop both sources and resume with a fresh rate baseline", asyn
     });
     document.dispatchEvent(new Event("visibilitychange"));
   });
-  await expect(page.locator("#connection-text")).toHaveText("已连接");
-  await expect(page.locator('#widget-mihomo [data-mihomo="up"]')).toHaveText(
-    "--",
-  );
-  await page.clock.runFor(5000);
+  await expect.poll(() => control.requests).toBeGreaterThan(beforeReturn);
   await expect(
     page.locator('#widget-mihomo [data-mihomo="up"]'),
   ).not.toHaveText("--");
+
+  // Explicit pause wins over visibility and online notifications.
+  await page.getByRole("button", { name: "暂停自动更新" }).click();
+  const pausedRequests = [control.requests, control.nasRequests];
+  await page.evaluate(() => {
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("online"));
+  });
+  await page.clock.runFor(10000);
+  expect([control.requests, control.nasRequests]).toEqual(pausedRequests);
+  await expect(page.locator("#connection-text")).toHaveText("已暂停更新");
+});
+
+test("a page opened hidden starts collection and pagehide still stops it", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+  });
+  const control = await mockSources(page);
+  await configured(page, true);
+  const requests = control.requests;
+  await page.clock.runFor(2000);
+  await expect.poll(() => control.requests).toBeGreaterThan(requests);
+  await page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent("pagehide")),
+  );
+  const stopped = [control.requests, control.nasRequests];
+  await page.clock.runFor(10000);
+  expect([control.requests, control.nasRequests]).toEqual(stopped);
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    ),
+  );
+  await expect.poll(() => control.requests).toBeGreaterThan(stopped[0]);
+  await expect.poll(() => control.nasRequests).toBeGreaterThan(stopped[1]);
 });
 
 test("NAS address changes and paused module toggles retain mihomo samples", async ({
@@ -544,8 +589,21 @@ test("three mihomo pages share samples, rankings and page-session usage", async 
   await refresh(page);
   await page.getByRole("button", { name: "暂停自动更新" }).click();
   const requests = control.requests;
+  // Every lazy mihomo trend inherits the global style without restarting reads.
+  await page.getByLabel("图表类型").selectOption("bar");
   await page.getByRole("link", { name: "mihomo 监控", exact: true }).click();
   await expect(page.locator("#view-mihomo canvas")).toHaveCount(3);
+  expect(
+    await page
+      .locator("#view-mihomo canvas")
+      .evaluateAll((canvases) =>
+        canvases.every(
+          (canvas) =>
+            /** @type {any} */ (window).Chart.getChart(canvas).config.type ===
+            "bar",
+        ),
+      ),
+  ).toBe(true);
   await expect(page.locator("#view-mihomo")).toContainText("TCP");
   await expect(page.locator("#view-mihomo")).toContainText("node-A");
   await page.screenshot({
@@ -565,6 +623,7 @@ test("three mihomo pages share samples, rankings and page-session usage", async 
     fullPage: true,
   });
   await page.getByRole("link", { name: "用量", exact: true }).click();
+  await page.getByLabel("图表类型").selectOption("line");
   await expect(page.locator('[data-mihomo-usage="total"]')).toHaveText(
     "234.0 KiB",
   );

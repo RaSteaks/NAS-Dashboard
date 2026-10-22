@@ -100,7 +100,14 @@ export const mihomoConnectionsView = {
     let context;
     /** @type {Connection|undefined} */
     let selected;
-    const detailBody = el("div", { class: "dialog-body" });
+    // Large text can make this read-only region scroll; keyboard users need
+    // a focus target inside it, including on Safari's native dialog surface.
+    const detailBody = el("div", {
+      class: "dialog-body",
+      tabindex: "0",
+      role: "region",
+      "aria-label": "连接详情内容",
+    });
     const close = el(
       "button",
       { type: "button", class: "button button-outline" },

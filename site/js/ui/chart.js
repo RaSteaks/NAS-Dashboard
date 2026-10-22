@@ -7,6 +7,16 @@ import { chartByteScale, time } from "../core/format.js";
 const Chart = /** @type {any} */ (typeof window === "undefined" ? {} : window)
   .Chart;
 
+/** @type {import("../core/types.js").ChartStyle} */
+let chartStyle = "area";
+
+/** Keep a single display owner so lazy views inherit the same preference.
+ * @param {import("../core/types.js").ChartStyle} style
+ */
+export function setChartStyle(style) {
+  chartStyle = style;
+}
+
 /**
  * @typedef {object} Series
  * @property {"cpu"|"memory"|"rx"|"tx"|"connections"} key
@@ -58,6 +68,7 @@ export function lineChart(canvas, series, mode = false) {
       normalized: true,
       interaction: { mode: "index", intersect: false },
       plugins: {
+        legend: { display: false },
         tooltip: {
           displayColors: true,
           backgroundColor: colors.getPropertyValue("--color-text").trim(),
@@ -105,6 +116,16 @@ export function lineChart(canvas, series, mode = false) {
   });
   return {
     update(history, windowMinutes) {
+      // Change controllers in place: presentation must not discard samples,
+      // restart polling, or reconnect a paused dashboard.
+      const bar = chartStyle === "bar";
+      chart.config.type = bar ? "bar" : "line";
+      const scale =
+        parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
+      chart.options.scales.x.ticks.font.size = 13 * scale;
+      chart.options.scales.y.ticks.font.size = 13 * scale;
+      chart.options.plugins.tooltip.titleFont.size = 14 * scale;
+      chart.options.plugins.tooltip.bodyFont.size = 14 * scale;
       const end = history.at(-1)?.timestamp ?? Date.now();
       const start = end - windowMinutes * 60000;
       // Re-read per update so a saved unit preference re-scales live charts.
@@ -115,6 +136,15 @@ export function lineChart(canvas, series, mode = false) {
       chart.options.scales.x.max = end;
       chart.data.datasets.forEach(
         (/** @type {any} */ dataset, /** @type {number} */ index) => {
+          dataset.fill = chartStyle === "area" ? "origin" : false;
+          const color = colors.getPropertyValue(series[index].color).trim();
+          // Canonical chart colors are six-digit hex tokens. Translucent area
+          // fills keep lower series visible instead of painting over their lines.
+          dataset.backgroundColor = bar ? color : `${color}22`;
+          dataset.borderWidth = bar ? 0 : 2;
+          dataset.maxBarThickness = 16;
+          // A linear time axis preserves actual sample timing and missing gaps.
+          dataset.barThickness = "flex";
           dataset.data = history
             .filter((point) => point.timestamp >= start)
             .map((point) => {

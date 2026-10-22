@@ -305,6 +305,20 @@ describe("detail formatting", () => {
 });
 
 describe("configuration", () => {
+  it("validates display preferences and keeps old settings compatible", () => {
+    // Invalid or older preferences cannot select an unsupported chart controller.
+    expect(mergeConfig({ chartStyle: "bar", textSize: "large" })).toMatchObject(
+      {
+        chartStyle: "bar",
+        textSize: "large",
+      },
+    );
+    for (const input of [{}, { chartStyle: "pie", textSize: "tiny" }])
+      expect(mergeConfig(input)).toMatchObject({
+        chartStyle: "area",
+        textSize: "standard",
+      });
+  });
   it("requires a user-supplied API and normalizes host:port addresses", () => {
     expect(defaults.api.url).toBe("");
     expect(normalizeApiAddress(" 192.0.2.10:61208/api/4/ ")).toBe(

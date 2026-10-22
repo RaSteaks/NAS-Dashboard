@@ -185,12 +185,13 @@ flowchart LR
    `./api/mihomo.php`，点击“测试 mihomo 连接”后保存。仅使用此数据源时，Glances 地址可留空。
 3. NAS 概览保留 mihomo 汇总卡片；桌面侧栏或手机导航的“mihomo 监控”进入模块，
    在“概览”“连接”“用量”三个页面间切换。所有页面复用采样，导航不会额外请求上游。
-   刷新、暂停和后台停止同时作用于已启用的数据源。
+   刷新和手动暂停同时作用于已启用的数据源；切换标签页或窗口后继续采集。
 
-启用后，mihomo 在面板处于前台时以**约每秒一次**的目标持续读取，与 Glances 的
+启用后，mihomo 在页面打开期间以**约每秒一次**的目标持续读取，与 Glances 的
 采集间隔独立。“Glances 更新间隔”只调整 NAS 指标；修改它不会重启 mihomo 读取或
-清空其用量。暂停、切到后台、关闭页面或禁用 mihomo 模块后停止读取，恢复时重新建立
-速率基线。这里使用现有 PHP 同源代理按秒读取快照，不需要增加 WebSocket／SSE 服务。
+清空其用量。手动暂停、关闭页面或禁用 mihomo 模块后停止读取，恢复时重新建立
+速率基线。切换标签页或窗口不会主动暂停，返回页面时立即刷新且不会重置有效基线。
+浏览器后台节流、冻结标签页或设备休眠仍可能延迟采样，超时段保留缺口，不补造数据。这里使用现有 PHP 同源代理按秒读取快照，不需要增加 WebSocket／SSE 服务。
 
 参考 [MetaCubeXD](https://github.com/MetaCubeX/metacubexd) 的信息组织方式，三个页面提供：
 
@@ -204,7 +205,7 @@ flowchart LR
 
 用量只存放在当前页面内存中，不写入 localStorage 或数据库。首次出现的连接用于建立
 计数基线，不把页面打开前的累计流量计入会话。趋势时间段会随会话长度合并，已记录的
-总字节数完整保留，不受概览 `historyMinutes` 限制。暂停、后台、采样失败及两次采样之间
+总字节数完整保留，不受概览 `historyMinutes` 限制。暂停、浏览器冻结／休眠、采样失败及两次采样之间
 已结束的短连接可能造成统计缺口；这些时段不会被伪造成已测量数据。
 
 | 服务端环境变量   | 用途                                                        |
@@ -363,24 +364,36 @@ Glances 端口避免直接暴露公网，使用 VPN 或认证入口。面板展�
 实际可见的数据；容量信息不代表 RAID / SMART 健康，网络速率使用 `*_rate_per_sec`，
 `time_since_update` 是采样年龄。
 
+## 显示与后台采集
+
+页面顶部可直接选择**折线图、面积图、柱状图**，统一应用于资源、网络及 mihomo
+趋势图；字号提供**标准、大号**两档。默认正文 16px，辅助文字不低于 12px，大号再
+放大 12.5%；图表坐标和提示文字同步放大。选择会保存在当前浏览器，刷新后仍生效，
+切换显示不会清空历史、修改采集间隔或恢复手动暂停。
+
+切换到其他标签页或窗口后，Glances 和 mihomo 会继续采集；返回时立即刷新。
+浏览器仍可能对后台页面节流或冻结，电脑休眠期间无法保证采样；面板按真实时间
+显示过期状态和采样缺口。关闭／刷新页面会结束本次内存历史，本版本不提供常驻采集服务。
+
 ## 配置
 
 公共默认值位于 [`site/config.json`](./site/config.json)，浏览器已保存的连接设置优先。
 公共配置不填写凭据。
 
-| 配置项                              | 默认值与作用                                         |
-| ----------------------------------- | ---------------------------------------------------- |
-| `name` / `subtitle`                 | `我的 NAS` / `Synology · 系统监控`                   |
-| `api`                               | `mode: direct`，`url` 为空，首次访问填写             |
-| `mihomo.url`                        | `./api/mihomo.php`，仅允许同源代理地址；模块默认关闭 |
-| `refreshSeconds` / `timeoutSeconds` | Glances 刷新间隔 `5` 秒，接口超时 `8` 秒             |
-| `historyMinutes`                    | 当前页面保留 `15` 分钟趋势                           |
-| `volumePattern`                     | `^/volume[0-9]+$`，筛选群晖存储卷                    |
-| `networkInterfaces`                 | `[]`，自动筛选；填写接口名可显式指定                 |
-| `networkIgnorePattern`              | 忽略回环和常见虚拟接口，具体正则见配置文件           |
-| `widgets`                           | `resources`、`storage`、`network`、`containers`      |
-| `unit` / `unitBase`                 | `auto` / `1024`，字节显示单位与换算进制              |
-| `thresholds`                        | CPU、内存、存储为 `85`，温度为 `70`                  |
+| 配置项                              | 默认值与作用                                                                                |
+| ----------------------------------- | ------------------------------------------------------------------------------------------- |
+| `name` / `subtitle`                 | `我的 NAS` / `Synology · 系统监控`                                                          |
+| `api`                               | `mode: direct`，`url` 为空，首次访问填写                                                    |
+| `mihomo.url`                        | `./api/mihomo.php`，仅允许同源代理地址；模块默认关闭                                        |
+| `refreshSeconds` / `timeoutSeconds` | Glances 刷新间隔 `5` 秒，接口超时 `8` 秒                                                    |
+| `historyMinutes`                    | 当前页面保留 `15` 分钟趋势                                                                  |
+| `volumePattern`                     | `^/volume[0-9]+$`，筛选群晖存储卷                                                           |
+| `networkInterfaces`                 | `[]`，自动筛选；填写接口名可显式指定                                                        |
+| `networkIgnorePattern`              | 忽略回环和常见虚拟接口，具体正则见配置文件                                                  |
+| `widgets`                           | `resources`、`storage`、`network`、`containers`                                             |
+| `unit` / `unitBase`                 | `auto` / `1024`，字节显示单位与换算进制                                                     |
+| `chartStyle` / `textSize`           | `area` / `standard`，图表类型与字号（支持 `line` / `area` / `bar` 和 `standard` / `large`） |
+| `thresholds`                        | CPU、内存、存储为 `85`，温度为 `70`                                                         |
 
 ## 开发与验证
 
@@ -406,8 +419,9 @@ npm run dev
 | `npm run test:php`              | PHP/cURL mihomo 代理、认证、响应过滤、内存流和故障处理 |
 | `docker compose config --quiet` | Compose 配置                                           |
 
-浏览器测试首次运行需 `npx playwright install chromium`，也可用
-`PLAYWRIGHT_CHANNEL=chrome` 选择已安装的 Chrome。Docker 测试需要 Docker 与 Git，
+浏览器测试首次运行需 `npx playwright install webkit`，默认使用隔离的无头 WebKit，
+不启动 Chrome 或连接个人浏览器配置；截图保存在 `artifacts/`，失败跟踪在
+`test-results/`，HTML 报告在 `playwright-report/`。Docker 测试需要 Docker 与 Git，
 会构建镜像并使用临时仓库；本地验证不替代 NAS ACL、PHP 和门户实测。
 `test:php` 使用 `php:8.3-cli` 临时容器和模拟上游，首次运行会下载镜像，完成后清理容器及
 测试配置；无需运行真实 mihomo，也不会访问 NAS。

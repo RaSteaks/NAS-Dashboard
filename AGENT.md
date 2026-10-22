@@ -70,12 +70,14 @@ on first visit; no private NAS address or credentials ship as defaults.
   and use raw ATA 194/190 or named NVMe Celsius readings, never normalized scores.
   Name-only devices stay visible with `--`; SMART failures do not block volume data.
 - History is bounded and exists only while this page is open. Demo history is fake
-  and explicitly labeled. Hidden tabs suspend polling; requests never overlap.
+  and explicitly labeled. Hidden tabs continue polling; requests never overlap. Returning to the page
+  refreshes both sources without resetting valid baselines. Manual pause/pagehide
+  still stop polling; browser freezing or device sleep can leave honest gaps.
 - Mihomo byte rates use counter deltas divided by actual monotonic elapsed seconds.
-  First samples, failures, counter resets, pauses and hidden-tab resumes establish
+  First samples, failures, counter resets, pauses and long sample gaps establish
   a new baseline. Its traffic history must never include NAS interface readings.
   Poller is generic: each source supplies a usable-data predicate; version metadata
-  alone cannot reset backoff. Refresh/pause/visibility controls cover both sources,
+  alone cannot reset backoff. Refresh/pause/page lifecycle controls cover both sources,
   and changing an address clears only that source's samples.
 - Glances retains settlement-based configurable polling. Mihomo targets 1000 ms
   between read starts, includes proxy/render time, and never overlaps slow reads.
@@ -91,6 +93,9 @@ on first visit; no private NAS address or credentials ship as defaults.
   Pauses/failures can leave observation gaps; do not invent unobserved traffic or
   infer closed connections from failed/truncated lists. Keep at most 200 observed
   ended connections, and remove reappearing IDs from that list.
+- Shared display preferences (`chartStyle`, `textSize`) persist locally and apply
+  to all trend charts without clearing data or restarting polling. CSS rem roles
+  use a 16px standard body and a 112.5% large mode; compact labels stay >= 12px.
 - Icon hydration initializes only new placeholders; existing SVGs survive refreshes.
 - The Chart.js UMD bundle registers its own controllers and plugins.
 - Local preview checks both decoded paths and symlink targets against `site/`.
@@ -109,7 +114,8 @@ pretending the browser supplies historical NAS uptime or samples.
 ## Verification
 
 Run `npm run typecheck`, `npm test`, `npm run format:check`, and
-`npm run test:e2e`. Browser coverage includes first connection, demo, API failures,
+`npm run test:e2e`. Use headless Playwright WebKit (never Chrome or a personal browser profile),
+with retained failure screenshots/traces and an HTML report. Browser coverage includes first connection, demo, API failures,
 partial responses, settings, keyboard, empty data, and mobile layout. PHP syntax is
 parsed by tests; verify the PHP/cURL runtime in Web Station before production use.
 Regression coverage includes stable icon nodes, class deduplication, sibling-path

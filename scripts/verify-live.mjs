@@ -1,4 +1,4 @@
-import { chromium } from "@playwright/test";
+import { webkit } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 
 // The caller supplies an endpoint for read-only integration checks; no IP is baked in.
@@ -6,7 +6,8 @@ const endpoint = process.env.GLANCES_API_URL;
 if (!endpoint)
   throw new Error("Set GLANCES_API_URL to the Glances 4 endpoint.");
 const base = process.env.DASHBOARD_URL ?? "http://127.0.0.1:5173";
-const browser = await chromium.launch({ channel: "chrome" });
+// Keep live checks isolated from installed browsers and personal profiles.
+const browser = await webkit.launch({ headless: true });
 await mkdir("artifacts", { recursive: true });
 
 try {

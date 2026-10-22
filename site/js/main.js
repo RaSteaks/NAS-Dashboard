@@ -30,6 +30,7 @@ import {
   mihomoStaleMs,
 } from "./core/mihomo.js";
 import { mihomoStatus } from "./ui/mihomo.js";
+import { setChartStyle } from "./ui/chart.js";
 import { $, el, icon, icons, setText, updateStatus } from "./ui/dom.js";
 import { requiredPlugins, widgets } from "./widgets/index.js";
 import { detailViews, viewMeta } from "./views/index.js";
@@ -129,6 +130,14 @@ function renderConnection() {
     offline: "连接中断",
   };
   const text = paused ? "已暂停更新" : stale ? "数据已过期" : states[overall];
+  setText(
+    "collection-hint",
+    paused
+      ? "采集已暂停"
+      : sources.length
+        ? "切换标签页后继续采集"
+        : "连接后支持后台采集",
+  );
   setText(
     "connection-text",
     demo ? (paused ? "演示已暂停" : "演示采样") : text,
@@ -535,6 +544,7 @@ function resetMihomo() {
 // Explicit connections reset samples so data from different sources cannot mix.
 function connect() {
   setByteUnits(config.unit, config.unitBase);
+  applyDisplay();
   resetGlances();
   resetMihomo();
   // Views keep local sample buffers (per-interface history, sort, paging);
@@ -615,7 +625,7 @@ function startPoller(glances = true, proxy = true) {
       },
     });
     poller = instance;
-    if (!paused && !document.hidden) instance.start();
+    if (!paused) instance.start();
   }
   if (proxy && mihomoActive()) {
     const instance = new Poller({
@@ -646,18 +656,41 @@ function startPoller(glances = true, proxy = true) {
       },
     });
     mihomoPoller = instance;
-    if (!paused && !document.hidden) instance.start();
+    if (!paused) instance.start();
   }
 }
 
 /** Repaint the dashboard from the snapshot already on screen. */
 function repaint() {
+  applyDisplay();
   renderHeader();
   renderConnection();
   if (!snapshot || !metrics) return;
   renderOverview(metrics);
   renderAll();
 }
+
+/** Browser-local presentation changes never restart either data source. */
+function applyDisplay() {
+  document.documentElement.dataset.textSize = config.textSize;
+  $("display-text-size", HTMLSelectElement).value = config.textSize;
+  $("display-chart-style", HTMLSelectElement).value = config.chartStyle;
+  setChartStyle(config.chartStyle);
+}
+
+for (const id of ["display-chart-style", "display-text-size"])
+  $(id, HTMLSelectElement).addEventListener("change", () => {
+    config.chartStyle = /** @type {Config["chartStyle"]} */ (
+      $("display-chart-style", HTMLSelectElement).value
+    );
+    config.textSize = /** @type {Config["textSize"]} */ (
+      $("display-text-size", HTMLSelectElement).value
+    );
+    storageWarning = saveSettings(config)
+      ? ""
+      : "浏览器未允许保存设置，当前页面仍可使用。";
+    repaint();
+  });
 
 // Use the published revision rather than GitHub's latest HEAD: the links must
 // identify the files actually deployed. Manual deployments may lack the stamp.
@@ -741,10 +774,9 @@ function updateApiLabel() {
  * @param {boolean} [firstRun=false]
  */
 function openSettings(firstRun = false) {
-  returnFocus =
-    document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : undefined;
+  // Safari does not focus buttons on pointer clicks. The single settings entry
+  // is the explicit return target instead of whichever field was focused before.
+  returnFocus = firstRun ? undefined : $("settings-sidebar", HTMLButtonElement);
   $("setting-name", HTMLInputElement).value = config.name;
   $("setting-mode", HTMLSelectElement).value = config.api.mode;
   $("setting-unit", HTMLSelectElement).value = config.unit;
@@ -1088,12 +1120,16 @@ $("pause-button", HTMLElement).addEventListener("click", () => {
   );
   icons();
   if (paused) stopSources();
-  else if (!document.hidden) resumeSources();
+  else resumeSources();
   renderConnection();
 });
 // Delegated so trend window buttons inside lazily mounted views also work.
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
+  // Preserve navigation focus in Safari too, where a pointer click alone does
+  // not focus the outgoing link before the hash route hides its container.
+  const link = target?.closest(".mihomo-subnav a, .mihomo-shortcuts a");
+  if (link instanceof HTMLAnchorElement) link.focus({ preventScroll: true });
   const button = target?.closest("[data-window]");
   if (!(button instanceof HTMLButtonElement)) return;
   windowMinutes = Number(button.dataset.window);
@@ -1103,17 +1139,19 @@ document.addEventListener("click", (event) => {
 // Navigation is hash-routed; views switch instead of scrolling to widgets.
 window.addEventListener("hashchange", () => showView(currentRoute()));
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stopSources();
-  else if (!paused) resumeSources();
+  // Switching tabs/windows does not stop collection or reset byte baselines.
+  // On return, refresh immediately; Poller coalesces any already-running read.
+  // Browser suspension can still leave gaps, handled by each source's timestamps.
+  if (!document.hidden && !paused) refreshSources();
   renderConnection();
 });
 window.addEventListener("online", () => {
   mihomo.resetBaseline();
-  if (!paused && !document.hidden) refreshSources();
+  if (!paused) refreshSources();
 });
 window.addEventListener("pagehide", stopSources);
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted && !paused && !document.hidden) resumeSources();
+  if (event.persisted && !paused) resumeSources();
 });
 
 // All lifecycle controls cover both sources; a pause never mixes elapsed rates.

@@ -94,9 +94,12 @@ system-color path under forced colors. Scrollbar tokens apply globally.
 
 System Chinese-capable body fonts avoid external font loading. Numeric readouts
 use Avenir Next where available and tabular numbers; technical paths use a system
-monospace stack. Letter spacing is zero. Desktop page heading is 27px, metric
-numbers 32px, body 14px, compact operational labels 10-12px. Fonts do not scale
-with viewport width. Long hostnames and container names wrap without clipping.
+monospace stack. Letter spacing is zero. Desktop page heading is 29px, metric
+numbers 36px, body 16px, compact operational labels 12–14px. Shared `--text-*`
+roles in `site/styles.css` use rem units; the saved `textSize` preference sets
+root size to 100% (standard) or 112.5% (large). No mobile rule shrinks labels below
+12px at the standard size. Chart axes use 13px and tooltips 14px, scaled from the
+same root size. Fonts do not scale with viewport width. Long hostnames and container names wrap without clipping.
 
 ## Layout
 
@@ -159,11 +162,14 @@ the same settings dialog. Its Secret is never a browser field. Glances may be em
 when mihomo is enabled. Both sources share refresh/pause controls while reporting
 independent freshness and failures; the source badge names every configured active
 source and never presents mihomo success as a Glances connection.
-Mihomo targets one read per second while the document is visible, including the
+Mihomo targets one read per second while the document is open, including the
 time spent waiting for the proxy. Glances retains its configurable interval after
 each completed read. Settings and the refresh label name the two cadences
 explicitly; changing the Glances interval does not reconnect mihomo. Slow reads
-never overlap, failures back off, and pause/background/close stop both sources.
+never overlap, failures back off, and manual pause/page exit stop both sources. Switching tabs or
+windows preserves collection and valid rate baselines; returning refreshes both
+sources immediately without overlapping reads. Browser freezing and device sleep
+can still cause measured gaps; missing history is never fabricated.
 Live mihomo updates repaint only its own widgets and views. A pending mihomo read
 does not lock manual Glances refresh when both sources are configured.
 
@@ -178,6 +184,13 @@ groups. The container state filter, sortable detail headers, and adaptive page
 controls preserve semantic HTML. Filtering and sorting reset to the first page;
 resizing keeps the current position and polling clamps pages after data changes.
 Charts provide textual current values; history represents actual in-page samples.
+The shared page display toolbar uses labeled native selects (platform-owned
+popups) for line, area and bar charts and standard/large text. `ui/chart.js` owns
+chart styles for every trend, including lazy detail views. Colors, units, gaps and
+actual time positions stay consistent; area fills are translucent so lower traces
+remain visible, and bar charts do not stack independent series.
+Preferences persist locally and repaint paused snapshots without resetting history.
+Selects and toolbar rows wrap on narrow screens; controls remain reachable.
 
 ### Forms and overlays
 
@@ -209,7 +222,8 @@ and their classes during metric refreshes.
 ### Motion
 
 140ms color changes; no animated chart interpolation or auto-scrolling. Reduced
-motion disables spinner animation and transitions. Hidden tabs stop network polls.
+motion disables spinner animation and transitions. Hidden tabs continue network polls;
+manual pause remains authoritative across visibility and network events.
 
 ### Content and data visualization
 

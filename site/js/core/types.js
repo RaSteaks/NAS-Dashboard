@@ -19,6 +19,10 @@
 
 /** @typedef {"resources"|"storage"|"network"|"containers"|"mihomo"} WidgetId */
 
+/** Shared display preferences apply to overview and lazily mounted charts. */
+/** @typedef {"line"|"area"|"bar"} ChartStyle */
+/** @typedef {"standard"|"large"} TextSize */
+
 /**
  * Only the public same-origin proxy address is browser-configurable; the
  * controller URL and Secret belong to the private server configuration.
@@ -59,6 +63,8 @@
  * @property {WidgetId[]} widgets
  * @property {ByteUnit} unit Byte unit every reading renders in ("auto" scales).
  * @property {1000|1024} unitBase Decimal or binary steps between units.
+ * @property {ChartStyle} chartStyle
+ * @property {TextSize} textSize
  * @property {Thresholds} thresholds
  */
 

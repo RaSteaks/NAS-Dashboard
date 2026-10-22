@@ -223,7 +223,8 @@ export class MihomoMonitor {
     this.config = config;
   }
 
-  // Pauses, hidden tabs and network failures must never bridge rate samples.
+  // Explicit pauses and network failures must never bridge rate samples.
+  // Hidden tabs keep their baseline; long browser suspensions are rejected by elapsed time.
   resetBaseline() {
     this.baseline = undefined;
     this.observations.clear();

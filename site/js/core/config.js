@@ -20,6 +20,9 @@ export const defaults = {
   widgets: ["resources", "storage", "network", "containers"],
   unit: "auto",
   unitBase: 1024,
+  // Readable defaults also apply when loading settings saved before these fields existed.
+  chartStyle: "area",
+  textSize: "standard",
   thresholds: { cpu: 85, memory: 85, storage: 85, temperature: 70 },
 };
 
@@ -119,6 +122,10 @@ export function mergeConfig(input, base = defaults) {
     config.unit = /** @type {Config["unit"]} */ (value.unit);
   if (value.unitBase === 1000 || value.unitBase === 1024)
     config.unitBase = value.unitBase;
+  if (["line", "area", "bar"].includes(value.chartStyle ?? ""))
+    config.chartStyle = /** @type {Config["chartStyle"]} */ (value.chartStyle);
+  if (["standard", "large"].includes(value.textSize ?? ""))
+    config.textSize = /** @type {Config["textSize"]} */ (value.textSize);
   if (value.thresholds) {
     for (const field of /** @type {["cpu","memory","storage","temperature"]} */ ([
       "cpu",
@@ -178,6 +185,8 @@ export function saveSettings(config) {
         widgets: config.widgets,
         unit: config.unit,
         unitBase: config.unitBase,
+        chartStyle: config.chartStyle,
+        textSize: config.textSize,
       }),
     );
     return true;

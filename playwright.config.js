@@ -1,21 +1,23 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Use Playwright's managed browser; installed channels remain selectable.
+// Isolated, headless WebKit only: never launch Chrome or a personal profile.
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30000,
   fullyParallel: true,
-  reporter: "list",
+  reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: "http://127.0.0.1:5173",
-    channel: process.env.PLAYWRIGHT_CHANNEL,
+    browserName: "webkit",
+    headless: true,
+    screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   projects: [
     {
       name: "desktop",
       use: {
-        ...devices["Desktop Chrome"],
+        ...devices["Desktop Safari"],
         viewport: { width: 1440, height: 1100 },
       },
     },
@@ -23,8 +25,6 @@ export default defineConfig({
       name: "mobile",
       use: {
         ...devices["iPhone 13"],
-        defaultBrowserType: "chromium",
-        channel: process.env.PLAYWRIGHT_CHANNEL,
       },
     },
   ],
